@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "eigen3",
+    "fmt",
+    "freetype",
+    "glew",
+    "glfw3",
+    "glm",
+    "opengl",
+    "physx"
+  ]
+}
