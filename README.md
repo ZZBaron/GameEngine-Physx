@@ -14,7 +14,7 @@ A 3D physics engine using OpenGL and PhysX.
 
 ```bash
 # 1. Clone the repository with submodules
-git clone https://github.com/YourUsername/GameEngine-PhysX
+git clone https://github.com/ZZBaron/GameEngine-PhysX
 cd GameEngine-PhysX
 
 # 2. Set up vcpkg (platform-specific commands below)
