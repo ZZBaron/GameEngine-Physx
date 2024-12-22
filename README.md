@@ -29,7 +29,7 @@ Open Command Prompt/Terminal and run these commands:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/GameEngine-PhysX
+git clone https://github.com/ZZBaron/GameEngine-PhysX
 cd GameEngine-PhysX
 ```
 
