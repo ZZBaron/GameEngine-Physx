@@ -41,7 +41,7 @@ git clone https://github.com/Microsoft/vcpkg.git
 3. Setup vcpkg:
 ```bash
 cd vcpkg
-./bootstrap-vcpkg.bat  # For Windows
+bootstrap-vcpkg.bat  # For Windows
 ./bootstrap-vcpkg.sh   # For Linux/MacOS
 cd ..
 ```
