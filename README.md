@@ -1,58 +1,86 @@
 # GameEngine PhysX
 A 3D physics engine using OpenGL and PhysX.
 
-## Requirements
+# Prerequisites
+
+- C++20 compatible compiler
+- CMake 3.8 or higher
 - Git
-- CMake (3.8 or higher)
-- C++ compiler with C++20 support
+- Internet connection (for vcpkg dependencies)
 
-## Installing Required Tools
+---
 
-If you don't already have a C++ compiler, CMake, or Git installed, follow these steps:
+## Quick Start
 
-1. **C++ Compiler**
-   - **Windows:** Install [MinGW](https://sourceforge.net/projects/mingw/) or the [Microsoft Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
-   - **Linux:** Install GCC with your package manager (e.g., `sudo apt install build-essential` on Ubuntu).
-   - **MacOS:** Install Xcode Command Line Tools with `xcode-select --install`.
-
-2. **CMake**
-   - Download and install CMake from the [official website](https://cmake.org/download/).
-
-3. **Git**
-   - Download and install Git from the [official website](https://git-scm.com/).
-
-For more detailed instructions, refer to the official documentation for each tool.
-
-## Setup & Build Instructions
-
-Open Command Prompt/Terminal and run these commands:
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/ZZBaron/GameEngine-PhysX
+# 1. Clone the repository with submodules
+git clone https://github.com/YourUsername/GameEngine-PhysX
 cd GameEngine-PhysX
-```
 
-2. Get vcpkg:
-```bash
+# 2. Set up vcpkg (platform-specific commands below)
 git clone https://github.com/Microsoft/vcpkg.git
 ```
 
-3. Setup vcpkg:
-```bash
-cd vcpkg
-bootstrap-vcpkg.bat  # For Windows
-./bootstrap-vcpkg.sh   # For Linux/MacOS
-cd ..
+### Windows
+```batch
+.\vcpkg\bootstrap-vcpkg.bat
+set VCPKG_ROOT=%CD%\vcpkg
 ```
 
-4. Build the engine:
+### Linux/macOS
 ```bash
+./vcpkg/bootstrap-vcpkg.sh
+export VCPKG_ROOT=$(pwd)/vcpkg
+```
+
+### Build Commands (All Platforms)
+```bash
+# Create build directory
 cmake -B build -S .
+
+# Build the project
 cmake --build build --config Release
 ```
-The executable will be in `build/Release/GameEnginePhysx.exe`.
 
+# Installing Prerequisites
+
+### Windows
+1. Install Visual Studio with "Desktop development with C++" workload
+   - Or install MinGW-w64/MSYS2 if you prefer
+2. Install CMake from https://cmake.org/download/
+
+### macOS
+1. Install Xcode Command Line Tools:
+```bash
+xcode-select --install
+```
+2. Install CMake:
+```bash
+brew install cmake
+```
+3. Follow Quick Start instructions above
+
+### Linux (Ubuntu/Debian)
+1. Install required packages:
+```bash
+sudo apt update
+sudo apt install build-essential cmake git
+```
+2. Follow Quick Start instructions above
+
+## Running the Application
+
+### Windows
+```bash
+.\build\Release\GameEnginePhysx.exe
+```
+
+### Linux/macOS
+```bash
+./build/GameEnginePhysx
+```
+
+---
 
 ## Features
 - OpenGL rendering
@@ -86,12 +114,3 @@ This project uses the following third-party libraries:
 
 These licenses apply to their respective components only.
 
-## Troubleshooting
-If you encounter build errors:
-
-1. Make sure you have all requirements installed.
-2. Try deleting the `build` directory and rebuilding.
-3. Ensure you ran the vcpkg bootstrap script.
-4. Check that your compiler supports C++20.
-
-For other issues, please open a GitHub issue.
