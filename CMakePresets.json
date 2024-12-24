@@ -51,21 +51,21 @@
       }
     },
     {
-      "name": "windows-mingw",
+      "name": "windows-make",
       "inherits": "windows",
       "displayName": "Windows MinGW",
       "generator": "MinGW Makefiles"
     },
     {
-      "name": "linux-default",
+      "name": "linux-make",
       "inherits": "linux",
-      "displayName": "Linux Default",
+      "displayName": "Linux Makefiles",
       "generator": "Unix Makefiles"
     },
     {
-      "name": "macos-default",
+      "name": "macos-make",
       "inherits": "macos",
-      "displayName": "macOS Default",
+      "displayName": "macOS Makefiles",
       "generator": "Unix Makefiles"
     }
   ],
@@ -78,6 +78,16 @@
     {
       "name": "release",
       "configurePreset": "windows-vs",
+      "configuration": "Release"
+    },
+    {
+      "name": "debug-make",
+      "configurePreset": "windows-make",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release-make",
+      "configurePreset": "windows-make",
       "configuration": "Release"
     }
   ]

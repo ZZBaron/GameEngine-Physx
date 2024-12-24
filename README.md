@@ -12,34 +12,28 @@ A 3D physics engine using OpenGL and PhysX.
 
 ## Quick Start
 
-```bash
 # 1. Clone the repository with submodules
+
+```bash
 git clone https://github.com/ZZBaron/GameEngine-PhysX
 cd GameEngine-PhysX
-
-# 2. Set up vcpkg (platform-specific commands below)
-git clone https://github.com/Microsoft/vcpkg.git
 ```
+
+# 2. Run build script (platform-specific commands below)
 
 ### Windows
 ```batch
-.\vcpkg\bootstrap-vcpkg.bat
-set VCPKG_ROOT=%CD%\vcpkg
+scripts\build_windows.bat
 ```
 
-### Linux/macOS
+### Linux
 ```bash
-./vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=$(pwd)/vcpkg
+scripts/build_linux.sh
 ```
 
-### Build Commands (All Platforms)
+### MacOS
 ```bash
-# Create build directory
-cmake -B build -S .
-
-# Build the project
-cmake --build build --config Release
+scripts/build_macos.sh
 ```
 
 # Installing Prerequisites
