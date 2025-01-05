@@ -27,76 +27,90 @@ Ray SelectionSystem::screenToWorldRay(double mouseX, double mouseY, int screenWi
     glm::vec4 rayWorld = glm::inverse(view) * rayEye;
     glm::vec3 rayDirection = glm::normalize(glm::vec3(rayWorld));
 
-    return Ray(cameraPos, rayDirection);
+    return Ray(camera->cameraPos, rayDirection);
 }
 
-bool SelectionSystem::raySphereIntersect(const Ray& ray, const Sphere* sphere, float& t) {
-    glm::vec3 sphereCenter = sphere->center;
-    float radius = sphere->radius;
+bool SelectionSystem::triangleIntersection(const Ray& ray, const glm::vec3& v0, const glm::vec3& v1,
+    const glm::vec3& v2, float& t) {
+    const float EPSILON = 0.0000001f;
 
-    glm::vec3 oc = ray.origin - sphereCenter;
-    float a = glm::dot(ray.direction, ray.direction);
-    float b = 2.0f * glm::dot(oc, ray.direction);
-    float c = glm::dot(oc, oc) - radius * radius;
-    float discriminant = b * b - 4 * a * c;
+    glm::vec3 edge1 = v1 - v0;
+    glm::vec3 edge2 = v2 - v0;
+    glm::vec3 h = glm::cross(ray.direction, edge2);
+    float a = glm::dot(edge1, h);
 
-    if (discriminant < 0) return false;
+    if (a > -EPSILON && a < EPSILON) return false;
 
-    t = (-b - sqrt(discriminant)) / (2.0f * a);
-    return t >= 0;
+    float f = 1.0f / a;
+    glm::vec3 s = ray.origin - v0;
+    float u = f * glm::dot(s, h);
+
+    if (u < 0.0f || u > 1.0f) return false;
+
+    glm::vec3 q = glm::cross(s, edge1);
+    float v = f * glm::dot(ray.direction, q);
+
+    if (v < 0.0f || u + v > 1.0f) return false;
+
+    t = f * glm::dot(edge2, q);
+    return t > EPSILON;
 }
 
-bool SelectionSystem::rayBoxIntersect(const Ray& ray, const RectPrism* box, float& t) {
-    glm::mat4 invModel = glm::inverse(box->getModelMatrix());
-    glm::vec3 rayOriginLocal = glm::vec3(invModel * glm::vec4(ray.origin, 1.0f));
-    glm::vec3 rayDirLocal = glm::normalize(glm::vec3(invModel * glm::vec4(ray.direction, 0.0f)));
+SelectionSystem::IntersectionResult SelectionSystem::rayMeshIntersection(
+    const Ray& localRay, const std::shared_ptr<Mesh>& mesh) {
 
-    glm::vec3 boxMin = -glm::vec3(box->sideLength_a, box->sideLength_b, box->sideLength_c) * 0.5f;
-    glm::vec3 boxMax = glm::vec3(box->sideLength_a, box->sideLength_b, box->sideLength_c) * 0.5f;
+    IntersectionResult result;
+    if (!mesh || mesh->indices.empty()) return result;
 
-    float tMin = (boxMin.x - rayOriginLocal.x) / rayDirLocal.x;
-    float tMax = (boxMax.x - rayOriginLocal.x) / rayDirLocal.x;
-    if (tMin > tMax) std::swap(tMin, tMax);
+    for (size_t i = 0; i < mesh->indices.size(); i += 3) {
+        const glm::vec3& v0 = mesh->positions[mesh->indices[i]];
+        const glm::vec3& v1 = mesh->positions[mesh->indices[i + 1]];
+        const glm::vec3& v2 = mesh->positions[mesh->indices[i + 2]];
 
-    float tyMin = (boxMin.y - rayOriginLocal.y) / rayDirLocal.y;
-    float tyMax = (boxMax.y - rayOriginLocal.y) / rayDirLocal.y;
-    if (tyMin > tyMax) std::swap(tyMin, tyMax);
+        float t;
+        if (triangleIntersection(localRay, v0, v1, v2, t)) {
+            if (t < result.distance) {
+                result.hit = true;
+                result.distance = t;
+            }
+        }
+    }
 
-    if ((tMin > tyMax) || (tyMin > tMax)) return false;
-    tMin = fmax(tMin, tyMin);
-    tMax = fmin(tMax, tyMax);
-
-    float tzMin = (boxMin.z - rayOriginLocal.z) / rayDirLocal.z;
-    float tzMax = (boxMax.z - rayOriginLocal.z) / rayDirLocal.z;
-    if (tzMin > tzMax) std::swap(tzMin, tzMax);
-
-    if ((tMin > tzMax) || (tzMin > tMax)) return false;
-
-    t = tMin;
-    return t >= 0;
+    return result;
 }
 
+SelectionSystem::IntersectionResult SelectionSystem::rayIntersectMesh(
+    const Ray& ray, const std::shared_ptr<Node>& node) {
 
-std::shared_ptr<PhysXBody> SelectionSystem::findIntersectedBody(const Ray& ray, PhysXWorld physicsWorld) {
-    float closestT = std::numeric_limits<float>::max();
+    IntersectionResult result;
+    if (!node || !node->mesh) return result;
+
+    // Transform ray to local space
+    glm::mat4 invWorld = glm::inverse(node->worldTransform);
+    glm::vec3 localOrigin = glm::vec3(invWorld * glm::vec4(ray.origin, 1.0f));
+    glm::vec3 localDir = glm::normalize(glm::vec3(invWorld * glm::vec4(ray.direction, 0.0f)));
+    Ray localRay(localOrigin, localDir);
+
+    return rayMeshIntersection(localRay, node->mesh);
+}
+
+bool SelectionSystem::handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
+    const glm::mat4& projection, const glm::mat4& view, PhysXWorld& physicsWorld) {
+
+    Ray ray = screenToWorldRay(mouseX, mouseY, screenWidth, screenHeight, projection, view);
+    float closestDistance = std::numeric_limits<float>::max();
     std::shared_ptr<PhysXBody> closestBody = nullptr;
 
     for (const auto& body : physicsWorld.bodies) {
-        float t;
-        bool hit = false;
+        auto node = body->getNode();
+        auto result = rayIntersectMesh(ray, node);
 
-        if (auto* sphere = dynamic_cast<Sphere*>(body->getShape().get())) {
-            hit = raySphereIntersect(ray, sphere, t);
-        }
-        else if (auto* box = dynamic_cast<RectPrism*>(body->getShape().get())) {
-            hit = rayBoxIntersect(ray, box, t);
-        }
-
-        if (hit && t < closestT) {
-            closestT = t;
+        if (result.hit && result.distance < closestDistance) {
+            closestDistance = result.distance;
             closestBody = body;
         }
     }
 
-    return closestBody;
+    selectedBody = closestBody;
+    return selectedBody != nullptr;
 }

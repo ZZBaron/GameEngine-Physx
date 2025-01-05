@@ -5,7 +5,19 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "PhysXWorld.h"
+#include "scene.h"
+
+
+
+ // Helper function to find PhysXBody for a node
+ inline std::shared_ptr<PhysXBody> findPhysicsBody(Scene& scene, std::shared_ptr<Node> node) {
+     for (const auto& body : scene.physicsWorld.bodies) {
+         if (body->node == node) {
+             return body;
+         }
+     }
+     return nullptr;
+ }
 
 // Function and variable declarations
 void toggleMenu();
@@ -14,6 +26,8 @@ void cleanupImGui();
 void createSphere();
 
 // forward declerations
+// class Scene;
+extern Scene scene; // Declare the external scene variable that appears in GameEngine.cpp
 extern std::shared_ptr<PhysXBody> selectedRB; // Selected rigid body pointer
 
 class MenuSystem {
@@ -26,6 +40,10 @@ private:
     // Input fields for sphere creation
     float sphereRadius;
     glm::vec3 sphereCenter;
+
+    // for selected items in the menu
+    std::shared_ptr<Material> selectedMaterial = nullptr;
+
 
 public:
     static MenuSystem& getInstance() {
@@ -80,8 +98,8 @@ public:
         GLFWwindow* window = glfwGetCurrentContext();
         glfwGetFramebufferSize(window, &display_w, &display_h);
 
-        // Set fixed menu size (80% of screen width, 90% of screen height)
-        float menuWidth = display_w * 0.8f;
+        // Set fixed menu size (50% of screen width, 90% of screen height)
+        float menuWidth = display_w * 0.5f;
         float menuHeight = display_h * 0.9f;
 
         // Center the menu
@@ -107,12 +125,231 @@ public:
             ImGui::PushStyleColor(ImGuiCol_TabActive, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 
             if (ImGui::BeginTabBar("MenuTabs", ImGuiTabBarFlags_None)) {
-                if (ImGui::BeginTabItem("Objects")) {
-                    // Objects tab content
-                    ImGui::BeginChild("ObjectsTab", ImVec2(0, 0), true);
-
-                    ImGui::Text("Object Creation");
+                if (ImGui::BeginTabItem("Scene")) {
+                    // Scene tab content
+                    ImGui::BeginChild("SceneTab", ImVec2(0, 0), true);
+                    ImGui::Text("View and edit scene properties");
                     ImGui::Separator();
+
+
+                    if (ImGui::TreeNode("Objects")) {
+                        static std::shared_ptr<Node> selectedNode = nullptr;
+
+                        if (ImGui::BeginTable("Objects Table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                            ImGui::TableSetupColumn("ID");
+                            ImGui::TableSetupColumn("Name");
+                            ImGui::TableSetupColumn("Type");
+                            ImGui::TableSetupColumn("Position");
+                            ImGui::TableHeadersRow();
+
+                            for (size_t i = 0; i < scene.sceneNodes.size(); i++) {
+                                auto& node = scene.sceneNodes[i];
+                                ImGui::TableNextRow();
+                                ImGui::TableNextColumn();
+
+                                char label[32];
+                                sprintf(label, "%zu", i);
+                                if (ImGui::Selectable(label, selectedNode == node, ImGuiSelectableFlags_SpanAllColumns)) {
+                                    selectedNode = node;
+                                    selectedRB = findPhysicsBody(scene, node);
+                                    selectedMaterial = nullptr; // Reset material selection when new node is selected
+                                }
+
+                                ImGui::TableNextColumn();
+                                ImGui::Text("%s", node->name.empty() ? "Unnamed" : node->name.c_str());
+
+                                ImGui::TableNextColumn();
+                                ImGui::Text("%s", findPhysicsBody(scene, node) ? "Physics Object" : "Static Object");
+
+                                ImGui::TableNextColumn();
+                                glm::vec3 pos = node->getWorldPosition();
+                                ImGui::Text("%.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
+                            }
+                            ImGui::EndTable();
+                        }
+
+                        if (selectedNode) {
+                            ImGui::SetNextWindowPos(ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowWidth(), ImGui::GetWindowPos().y));
+                            ImGui::Begin("Object Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+                            if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+                                glm::vec3 worldPos = selectedNode->getWorldPosition();
+                                ImGui::Text("World Position: %.2f, %.2f, %.2f", worldPos.x, worldPos.y, worldPos.z);
+
+                                ImGui::Text("Local Transform:");
+                                ImGui::Indent();
+                                ImGui::Text("Translation: %.2f, %.2f, %.2f",
+                                    selectedNode->localTranslation.x,
+                                    selectedNode->localTranslation.y,
+                                    selectedNode->localTranslation.z);
+
+                                glm::vec3 eulerAngles = glm::degrees(glm::eulerAngles(selectedNode->localRotation));
+                                ImGui::Text("Rotation (degrees): %.2f, %.2f, %.2f",
+                                    eulerAngles.x, eulerAngles.y, eulerAngles.z);
+
+                                ImGui::Text("Scale: %.2f, %.2f, %.2f",
+                                    selectedNode->localScale.x,
+                                    selectedNode->localScale.y,
+                                    selectedNode->localScale.z);
+                                ImGui::Unindent();
+                            }
+
+                            if (selectedNode->mesh && ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
+                                if (ImGui::BeginTable("Materials Table", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                                    ImGui::TableSetupColumn("ID");
+                                    ImGui::TableSetupColumn("Name");
+                                    ImGui::TableSetupColumn("Base Color");
+                                    ImGui::TableHeadersRow();
+
+                                    for (size_t i = 0; i < selectedNode->mesh->materials.size(); i++) {
+                                        auto& material = selectedNode->mesh->materials[i];
+                                        ImGui::TableNextRow();
+                                        ImGui::TableNextColumn();
+
+                                        char label[32];
+                                        sprintf(label, "%zu", i);
+                                        if (ImGui::Selectable(label, selectedMaterial == material, ImGuiSelectableFlags_SpanAllColumns)) {
+                                            selectedMaterial = material;
+                                        }
+
+                                        ImGui::TableNextColumn();
+                                        ImGui::Text("%s", material->name.empty() ? "Unnamed" : material->name.c_str());
+
+                                        ImGui::TableNextColumn();
+                                        ImGui::ColorButton("##color", ImVec4(
+                                            material->baseColor.r,
+                                            material->baseColor.g,
+                                            material->baseColor.b,
+                                            1.0f
+                                        ));
+                                    }
+                                    ImGui::EndTable();
+                                }
+
+                                if (selectedMaterial) {
+                                    ImGui::Separator();
+                                    ImGui::Text("Material Properties:");
+                                    ImGui::Indent();
+
+                                    // Base properties
+                                    float baseColor[3] = {
+                                        selectedMaterial->baseColor.r,
+                                        selectedMaterial->baseColor.g,
+                                        selectedMaterial->baseColor.b
+                                    };
+                                    if (ImGui::ColorEdit3("Base Color", baseColor)) {
+                                        selectedMaterial->baseColor = glm::vec3(baseColor[0], baseColor[1], baseColor[2]);
+                                    }
+
+                                    float metallic = selectedMaterial->metallic;
+                                    if (ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f)) {
+                                        selectedMaterial->metallic = metallic;
+                                    }
+
+                                    float roughness = selectedMaterial->roughness;
+                                    if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f)) {
+                                        selectedMaterial->roughness = roughness;
+                                    }
+
+                                    float emission[3] = {
+                                        selectedMaterial->emission.r,
+                                        selectedMaterial->emission.g,
+                                        selectedMaterial->emission.b
+                                    };
+                                    if (ImGui::ColorEdit3("Emission", emission)) {
+                                        selectedMaterial->emission = glm::vec3(emission[0], emission[1], emission[2]);
+                                    }
+
+                                    float emissionStrength = selectedMaterial->emissionStrength;
+                                    if (ImGui::SliderFloat("Emission Strength", &emissionStrength, 0.0f, 10.0f)) {
+                                        selectedMaterial->emissionStrength = emissionStrength;
+                                    }
+
+                                    if (!selectedMaterial->textureMaps.empty()) {
+                                        ImGui::Text("\nTexture Maps:");
+                                        for (const auto& [mapType, textureMap] : selectedMaterial->textureMaps) {
+                                            ImGui::Text("%s Map (ID: %u)", mapType.c_str(), textureMap.textureId);
+                                        }
+                                    }
+
+                                    ImGui::Unindent();
+                                }
+                            }
+
+                            auto physBody = findPhysicsBody(scene, selectedNode);
+                            if (physBody && ImGui::CollapsingHeader("Physics", ImGuiTreeNodeFlags_DefaultOpen)) {
+                                ImGui::Text("Mass: %.2f", physBody->getMass());
+
+                                glm::vec3 vel = physBody->getVelocity();
+                                ImGui::Text("Velocity: %.2f, %.2f, %.2f", vel.x, vel.y, vel.z);
+
+                                glm::vec3 angVel = physBody->getAngularVelocity();
+                                ImGui::Text("Angular Velocity: %.2f, %.2f, %.2f",
+                                    angVel.x, angVel.y, angVel.z);
+
+                                glm::vec3 linearMomentum = vel * physBody->getMass();
+                                ImGui::Text("Linear Momentum: %.2f, %.2f, %.2f",
+                                    linearMomentum.x, linearMomentum.y, linearMomentum.z);
+
+                                glm::vec3 angularMomentum = physBody->getAngularMomentum();
+                                ImGui::Text("Angular Momentum: %.2f, %.2f, %.2f",
+                                    angularMomentum.x, angularMomentum.y, angularMomentum.z);
+                            }
+
+                            ImGui::End();
+                        }
+
+                        ImGui::TreePop();
+                    }
+
+
+                    if (ImGui::TreeNode("Physics")) {
+                        // bool play
+                        bool play = scene.play;
+                        if (ImGui::Button(play ? "Pause" : "Play", ImVec2(120, 30))) {
+                            scene.play = !play;
+                            // Add your play/pause logic here
+                            // For example: togglePlay();
+                        }
+                        ImGui::TreePop();
+
+                    }
+
+                    if (ImGui::TreeNode("Camera Settings")) {
+                        if (scene.activeCamera) {
+                            // Position
+                            glm::vec3 camPos = scene.activeCamera->cameraPos;
+                            if (ImGui::DragFloat3("Position", &camPos.x, 0.1f)) {
+                                scene.activeCamera->setCameraPos(camPos);
+                            }
+
+                            // Front vector (view direction)
+                            glm::vec3 camFront = scene.activeCamera->cameraFront;
+                            if (ImGui::DragFloat3("View Direction", &camFront.x, 0.01f, -1.0f, 1.0f)) {
+                                scene.activeCamera->setCameraFront(glm::normalize(camFront));
+                            }
+
+                            // Camera speed
+                            float speed = scene.activeCamera->cameraSpeed;
+                            if (ImGui::DragFloat("Movement Speed", &speed, 0.001f, 0.001f, 0.1f)) {
+                                scene.activeCamera->cameraSpeed = speed;
+                            }
+
+                            // Camera sensitivity
+                            float sensitivity = scene.activeCamera->sensitivity;
+                            if (ImGui::DragFloat("Mouse Sensitivity", &sensitivity, 0.01f, 0.01f, 1.0f)) {
+                                scene.activeCamera->sensitivity = sensitivity;
+                            }
+
+                            // Display current yaw and pitch (read-only)
+                            ImGui::Text("Yaw: %.2f", scene.activeCamera->yaw);
+                            ImGui::Text("Pitch: %.2f", scene.activeCamera->pitch);
+                        }
+                        else {
+                            ImGui::Text("No active camera");
+                        }
+                        ImGui::TreePop();
+                    }
 
                     if (ImGui::TreeNode("Add Sphere")) {
                         ImGui::DragFloat("Radius", &sphereRadius, 0.1f, 0.1f, 10.0f);

@@ -2,6 +2,7 @@
 #pragma once
 #include "GameEngine.h"
 #include "ui.h"
+#include "camera.h"
 
 extern std::map<int, bool> keyStates; // Map to track key states
 
@@ -11,4 +12,6 @@ void press_once_noargs(GLFWwindow* window, int key, void(*func)());
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+void setActiveCamera(std::shared_ptr<Camera> camera);
+
 

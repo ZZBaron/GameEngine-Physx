@@ -3,11 +3,11 @@
 #include "GameEngine.h"
 
 namespace fs = std::filesystem;
-std::string PROJECT_ROOT_NAME = "GameEngine Physx";
+inline std::string PROJECT_ROOT_NAME = "GameEngine Physx";
 
 
 // Cross - platform solution to getting project root using std::filesystem
-std::string getProjectRoot() {
+inline std::string getProjectRoot() {
 	std::filesystem::path executablePath = std::filesystem::current_path();
 	while (executablePath.has_parent_path() && executablePath.filename() != PROJECT_ROOT_NAME) {
 		executablePath = executablePath.parent_path();
@@ -23,7 +23,7 @@ std::string getProjectRoot() {
 
 
 // Misclanious functions
-std::string vec3_to_string(glm::vec3 v, int decimal_places = 2) { // assuming vec3 is floats
+inline std::string vec3_to_string(glm::vec3 v, int decimal_places = 2) { // assuming vec3 is floats
 	std::stringstream x_comp_stream;
 	x_comp_stream << std::fixed << std::setprecision(decimal_places) << v.x;
 	std::string x_str = x_comp_stream.str();
@@ -78,4 +78,26 @@ public:
 	}
 
 };
+
+// Singularites in lightView matrix made creating this function necessary
+inline glm::mat4 createViewMatrix(const glm::vec3& pos, const glm::vec3& targetPos, const glm::vec3& upVector) {
+	// Calculate the direction vector from light to target
+	glm::vec3 direction = targetPos - pos;
+
+	// Check if direction is parallel to up vector (their cross product is near zero)
+	glm::vec3 right = glm::cross(direction, upVector);
+	if (glm::length(right) < 0.0001f) {
+		// If they're parallel, use a different up vector
+		// If light is above target (common case), use world Z as temp up
+		// If light is below target, use negative world Z as temp up
+		glm::vec3 tempUp = (direction.y >= 0.0f) ?
+			glm::vec3(0.0f, 0.0f, 1.0f) :
+			glm::vec3(0.0f, 0.0f, -1.0f);
+
+		return glm::lookAt(pos, targetPos, tempUp);
+	}
+
+	// Normal case - use the provided up vector
+	return glm::lookAt(pos, targetPos, upVector);
+}
 

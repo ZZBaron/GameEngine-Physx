@@ -1,7 +1,8 @@
 #pragma once
 #include "GameEngine.h"
-#include "shape.h"
+#include "scene.h"
 #include "PhysXWorld.h"
+#include "primitveNodes.h"
 
 // Function to generate a random float between min and max
 float randomFloat(float min, float max) {
@@ -15,7 +16,7 @@ glm::vec3 randomColor() {
     return glm::vec3(randomFloat(0.0f, 1.0f), randomFloat(0.0f, 1.0f), randomFloat(0.0f, 1.0f));
 }
 
-void generateRandomSpheres(PhysXWorld& physicsWorld,
+void generateRandomSpheres(Scene& scene,
     const glm::vec3& boxMin,
     const glm::vec3& boxMax,
     float radius,
@@ -32,43 +33,64 @@ void generateRandomSpheres(PhysXWorld& physicsWorld,
         );
 
         // Create sphere
-        auto sphere = std::make_shared<Sphere>(position, radius, numSlices, numStacks);
 
-        // Set random color
-        sphere->color = randomColor();
+        auto sphereNode = std::make_shared<SphereNode>(1.0f, 20, 20);
+        sphereNode->setWorldPosition(position);
 
-        // Create RigidBody for the sphere
-        auto sphereRB = std::make_shared<PhysXBody>(sphere);
-        physicsWorld.addBody(sphereRB);
+        // Set random color for the mesh
+        if (sphereNode->mesh) {
+            glm::vec4 randomVertexColor(randomColor(), 1.0f);  // Random RGB + alpha 1.0
+            for (size_t i = 0; i < sphereNode->mesh->colors.size(); i++) {
+                sphereNode->mesh->colors[i] = randomVertexColor;
+            }
+            // Update the mesh buffers to reflect the color change
+            //sphereNode->mesh->updateBuffers();
+        }
+
+        // Create physics body for the sphere
+        auto sphereBody = std::make_shared<PhysXBody>(sphereNode, false);  // false = dynamic body
+        scene.addPhysicsBody(sphereBody);
+
+      
+
     }
 }
 
-void generateRandomBoxes(PhysXWorld physicsWorld,
-    const glm::vec3& boundBoxMin,
-    const glm::vec3& boundBoxMax,
-    const float sideLength_a,
-    const float sideLength_b,
-    const float sideLength_c,
-    int count,
-    float mass = 1.0f) {
-    RectPrism boundingBox(boundBoxMin,boundBoxMax);
-
-    for (int i = 0; i < count; ++i) {
-        // Generate random position within the bounding box
-        glm::vec3 position(
-            randomFloat(boundBoxMin.x + sideLength_a, boundBoxMax.x - sideLength_a),
-            randomFloat(boundBoxMin.y + sideLength_b, boundBoxMax.y - sideLength_b),
-            randomFloat(boundBoxMin.z + sideLength_c, boundBoxMax.z - sideLength_c)
-        );
-
-        // Create rectprism
-        auto rectPrism = std::make_shared<RectPrism>(position, sideLength_a, sideLength_b, sideLength_c);
-
-        // Set random color
-        rectPrism->color = randomColor();
-
-        // Create RigidBody for the sphere
-        auto rectPrismRB = std::make_shared<PhysXBody>(rectPrism);
-        physicsWorld.addBody(rectPrismRB);
-    }
-}
+// void generateRandomBoxes(Scene& scene,
+//     const glm::vec3& boundBoxMin,
+//     const glm::vec3& boundBoxMax,
+//     const float sideLength_a,
+//     const float sideLength_b,
+//     const float sideLength_c,
+//     int count,
+//     float mass = 1.0f) {
+//     RectPrism boundingBox(boundBoxMin,boundBoxMax);
+// 
+//     for (int i = 0; i < count; ++i) {
+//         // Generate random position within the bounding box
+//         glm::vec3 position(
+//             randomFloat(boundBoxMin.x + sideLength_a, boundBoxMax.x - sideLength_a),
+//             randomFloat(boundBoxMin.y + sideLength_b, boundBoxMax.y - sideLength_b),
+//             randomFloat(boundBoxMin.z + sideLength_c, boundBoxMax.z - sideLength_c)
+//         );
+// 
+//         auto boxNode = std::make_shared<BoxNode>(sideLength_c, sideLength_b, sideLength_c);
+//         boxNode->setWorldPosition(position);
+// 
+//     
+// 
+//         // Set random color for the mesh
+//         if (boxNode->mesh) {
+//             glm::vec4 randomVertexColor(randomColor(), 1.0f);  // Random RGB + alpha 1.0
+//             for (size_t i = 0; i < boxNode->mesh->colors.size(); i++) {
+//                 boxNode->mesh->colors[i] = randomVertexColor;
+//             }
+//             // Update the mesh buffers to reflect the color change
+//             //boxNode->mesh->updateBuffers();
+//         }
+// 
+//         // Create physics body for the sphere
+//         auto boxBody = std::make_shared<PhysXBody>(boxNode, false);  // false = dynamic body
+//         scene.addPhysicsBody(boxBody);
+//     }
+// }

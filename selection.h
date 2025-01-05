@@ -5,12 +5,8 @@
 #include <limits>
 #include "PhysXBody.h"
 #include "PhysXWorld.h"
+#include "object3D.h"
 
-// Forward declarations
-extern PhysXWorld physicsWorld;
-extern std::shared_ptr<PhysXBody> selectedRB;
-
-// Ray structure for intersection testing
 struct Ray {
     glm::vec3 origin;
     glm::vec3 direction;
@@ -20,19 +16,31 @@ struct Ray {
 
 class SelectionSystem {
 private:
+    std::shared_ptr<Camera> camera;
     static SelectionSystem* instance;
+    std::shared_ptr<PhysXBody> selectedBody;
 
 public:
     static SelectionSystem& getInstance();
+    std::shared_ptr<PhysXBody> getSelectedBody() const { return selectedBody; }
 
-    // Declare functions but don't define them here
-    static Ray screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight,
+    Ray screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight,
         const glm::mat4& projection, const glm::mat4& view);
 
-    static bool raySphereIntersect(const Ray& ray, const Sphere* sphere, float& t);
-    static bool rayBoxIntersect(const Ray& ray, const RectPrism* box, float& t);
-    std::shared_ptr<PhysXBody> findIntersectedBody(const Ray& ray, PhysXWorld physicsWorld);
+    bool handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
+        const glm::mat4& projection, const glm::mat4& view, PhysXWorld& physicsWorld);
 
 private:
-    SelectionSystem() {} // Private constructor for singleton
+    SelectionSystem() : selectedBody(nullptr) {}
+
+    struct IntersectionResult {
+        bool hit;
+        float distance;
+        IntersectionResult() : hit(false), distance(std::numeric_limits<float>::max()) {}
+    };
+
+    IntersectionResult rayIntersectMesh(const Ray& ray, const std::shared_ptr<Node>& node);
+    IntersectionResult rayMeshIntersection(const Ray& localRay, const std::shared_ptr<Mesh>& mesh);
+    bool triangleIntersection(const Ray& ray, const glm::vec3& v0, const glm::vec3& v1,
+        const glm::vec3& v2, float& t);
 };

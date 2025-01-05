@@ -9,7 +9,7 @@
     "glfw3",
     "glm",
     "opengl",
-    "physx"
-
+    "physx",
+    "assimp"
   ]
 }

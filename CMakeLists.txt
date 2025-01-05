@@ -33,6 +33,7 @@ find_package(glew REQUIRED)
 find_package(glm REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(Eigen3 CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
 
 # Try different possible PhysX package names
 find_package(unofficial-omniverse-physx-sdk CONFIG QUIET)
@@ -52,20 +53,21 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
+set(MFEM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/mfem")
+
 
 # Group source files
 set(ENGINE_SOURCES
     "GameEngine.cpp"
     "ui.cpp"
     "input.cpp"
-    "camera.cpp"
     "font.cpp"
     "console.cpp"
     "debugRenderer.cpp"
-    "blender.cpp"
     "stb_image_impl.cpp"
     "selection.cpp"
     "PhysXManager.cpp"
+    
 )
 
 set(ENGINE_HEADERS
@@ -73,31 +75,28 @@ set(ENGINE_HEADERS
     "ui.h"
     "input.h"
     "camera.h"
-    "shape.h"
     "font.h"
-    "animate.h"
+    
     "console.h"
     "randomGen.h"
     "debugRenderer.h"
-    "blender.h"
     "shader.h"
     "misc_funcs.h"
-    "voxel.h"
-    "AABB.h"
-    "texture.h"
     "stb_image.h"
     "selection.h"
     "PhysXManager.h"
     "PhysXBody.h"
     "PhysXWorld.h"
     "PhysXSimulation.h"
+    "object3D.h"
+    "shadowMap.h"
 )
 # Create executable
 add_executable(GameEnginePhysx 
     ${ENGINE_SOURCES}
     ${ENGINE_HEADERS}
     ${IMGUI_SOURCES}
-)
+  "shadowRenderer.h"   "primitveNodes.h" "scene.h"   "textureManager.h" "modelImporter.h" "Nodes/tube.h" "lineParameterization.h")
 
 
 
@@ -106,6 +105,7 @@ target_include_directories(GameEnginePhysx PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
+    ${MFEM_DIR}
 )
 
 # Platform-specific configurations
@@ -124,13 +124,21 @@ target_link_libraries(GameEnginePhysx PRIVATE
     glm::glm
     Freetype::Freetype
     Eigen3::Eigen
+    assimp::assimp
 )
 
 # Add PhysX library based on which version was found
 if(unofficial-omniverse-physx-sdk_FOUND)
-    target_link_libraries(GameEnginePhysx PRIVATE unofficial::omniverse-physx-sdk::sdk)
+
+    target_link_libraries(GameEnginePhysx PRIVATE 
+    unofficial::omniverse-physx-sdk::sdk
+    unofficial::omniverse-physx-sdk::PhysXCooking 
+    )
 else()
-    target_link_libraries(GameEnginePhysx PRIVATE PhysX::PhysX)
+    target_link_libraries(GameEnginePhysx PRIVATE 
+    PhysX::PhysX
+    PhysX::PhysXCooking
+    )
 endif()
 
 

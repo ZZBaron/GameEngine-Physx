@@ -3,10 +3,8 @@
 #include "GameEngine.h"
 #include "console.h"
 #include "font.h"
-#include "shape.h"
 
 extern GLuint textShaderProgram;
-extern std::vector<std::shared_ptr<Shape>> shapes;
 
 Console& Console::getInstance() {
     static Console instance;

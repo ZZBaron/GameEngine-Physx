@@ -1,4 +1,4 @@
-﻿// CMakeProject2.h : Include file for standard system include files,
+﻿// GameEngine.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -26,10 +26,6 @@
 
 //#include <fmt/core.h>
 
-//#include <GL/glew.h>        // GLEW for managing OpenGL extensions
-//#include <GLFW/glfw3.h>     // GLFW for window management and input
-//#include <glm/glm.hpp>      // GLM for mathematics
-//#include <glm/gtc/matrix_transform.hpp>  // GLM for matrix transformations
 
-// TODO: Reference additional headers your program requires here.
+
 

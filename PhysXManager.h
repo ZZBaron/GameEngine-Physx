@@ -1,7 +1,9 @@
 // PhysXManager.h
 #pragma once
-#include "GameEngine.h"
+
 #include <PxPhysicsAPI.h>
+#include "GameEngine.h"
+
 
 using namespace physx;
 
@@ -15,6 +17,7 @@ private:
     PxDefaultCpuDispatcher* dispatcher;
     PxScene* scene;
     PxPvd* pvd; // Physics visual debugger
+
 
 public:
     // Singleton method
@@ -42,6 +45,7 @@ public:
         if (!physics) {
             return false;
         }
+
 
         // Create scene
         PxSceneDesc sceneDesc(physics->getTolerancesScale());

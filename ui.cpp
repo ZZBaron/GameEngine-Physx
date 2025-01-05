@@ -8,6 +8,7 @@
 #include "vender/imgui/imgui.h"
 #include "vender/imgui/backends/imgui_impl_glfw.h"
 #include "vender/imgui/backends/imgui_impl_opengl3.h"
+#include "scene.h"
 
 // maybe use qt?
 //#include <QApplication> // for qt5 menu
@@ -15,6 +16,8 @@
 //#include <QVBoxLayout>
 //#include <QLabel>
 //#include <QWidget>
+
+// i need to acess 
 
 bool isMenuOpen = false;
 MenuSystem* MenuSystem::instance = nullptr;
