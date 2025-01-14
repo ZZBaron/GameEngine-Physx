@@ -34,7 +34,7 @@ void generateRandomSpheres(Scene& scene,
 
         // Create sphere
 
-        auto sphereNode = std::make_shared<SphereNode>(radius, 20, 20);
+        auto sphereNode = std::make_shared<SphereNode>(radius, numSlices, numStacks);
         sphereNode->setWorldPosition(position);
 
         // Set random color for the mesh

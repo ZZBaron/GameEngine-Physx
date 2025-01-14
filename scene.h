@@ -6,6 +6,9 @@
 #include "shadowRenderer.h"
 #include "player.h"
 #include "UVviewer.h"
+#include "vender/imgui/imgui.h"
+#include "vender/imgui/backends/imgui_impl_glfw.h"
+#include "vender/imgui/backends/imgui_impl_opengl3.h"
 
 
 class Scene {
@@ -43,6 +46,7 @@ public:
     //draw flags
     bool drawWireframes = false;
     bool drawObjects = true;
+    bool drawControlsoverlay = true;
 
 	glm::vec3 ambientLight;
 	std::vector<std::shared_ptr<Node>> lights;
@@ -243,6 +247,9 @@ public:
             drawWireFrames();
         }
 
+        if (drawControlsoverlay) {
+            drawControlsOverlay();
+        }
 
 
 
@@ -299,6 +306,36 @@ public:
         }
 
 
+    }
+
+    void drawControlsOverlay() {
+        // Draw controls overlay
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.3f);
+        ImGui::Begin("Controls", nullptr,
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoDecoration |
+            ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoNav);
+
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Controls:");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "WASD - Camera Movement");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Space - Toggle Camera Control");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "P - Toggle Menu");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "L - Toggle Play/Pause");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "G - Toggle Sphere Generation");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "O - Toggle Wireframes");
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "` - Toggle Console");
+
+        ImGui::End();
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
 
 };

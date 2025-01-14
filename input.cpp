@@ -11,9 +11,6 @@
 
 extern Scene scene;
 
-// Global camera pointer that comes from scene.activeCamera in main
-auto g_camera = scene.activeCamera;
-
 bool consoleInputOnly = false;
 std::map<int, bool> keyStates; // Map to track key states
 extern bool genSpheres;
@@ -56,14 +53,14 @@ void press_once_noargs(GLFWwindow* window, int key, void(*func)()) {
 
 // Mouse callback function
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    if (!g_camera) return;
+    if (!scene.activeCamera) return;
 
     static double lastX = 400.0;
     static double lastY = 300.0;
     static bool firstMouse = true;
 
     // Process mouse movement only if camstate is true
-    if (g_camera->camstate) {
+    if (scene.activeCamera->camstate) {
         if (firstMouse) {
             lastX = xpos;
             lastY = ypos;
@@ -75,11 +72,11 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         lastX = xpos;
         lastY = ypos;
 
-        xoffset *= g_camera->sensitivity;
-        yoffset *= g_camera->sensitivity;
+        xoffset *= scene.activeCamera->sensitivity;
+        yoffset *= scene.activeCamera->sensitivity;
 
-        g_camera->setYaw(g_camera->yaw + xoffset);
-        g_camera->setPitch(g_camera->pitch + yoffset);
+        scene.activeCamera->setYaw(scene.activeCamera->yaw + xoffset);
+        scene.activeCamera->setPitch(scene.activeCamera->pitch + yoffset);
     }
     else {
         // If camstate is false, reset lastX and lastY to the current cursor position
@@ -88,15 +85,12 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     }
 }
 
-   
 
-
- void togglePlay() {
+ void static togglePlay() {
      scene.play = !scene.play;
  }
 
-void toggleGenSpheres() {
-    std::cout << "spheres should be gen" << std::endl;
+void static toggleGenSpheres() {
 	genSpheres = !genSpheres;
 }
 
@@ -170,7 +164,7 @@ void processInput(GLFWwindow* window) {
     // Call press_once for the spacebar key
     // Use a simple lambda to wrap the camera.toggleCam call
     press_once(window, GLFW_KEY_SPACE, [](GLFWwindow* w) {
-        if (g_camera) g_camera->toggleCam(w);
+        if (scene.activeCamera) scene.activeCamera->toggleCam(w);
         });
 
     press_once_noargs(window, GLFW_KEY_P, toggleMenu);
@@ -180,18 +174,18 @@ void processInput(GLFWwindow* window) {
     press_once_noargs(window, GLFW_KEY_O, toggleWireFrames);
 
     // Handle movement controls only if camstate is true
-    if (g_camera->camstate) {
+    if (scene.activeCamera->camstate) {
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            g_camera->setCameraPos(g_camera->cameraPos + g_camera->cameraSpeed * g_camera->cameraFront);
+            scene.activeCamera->setCameraPos(scene.activeCamera->cameraPos + scene.activeCamera->cameraSpeed * scene.activeCamera->cameraFront);
         }
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            g_camera->setCameraPos(g_camera->cameraPos - g_camera->cameraSpeed * g_camera->cameraFront);
+            scene.activeCamera->setCameraPos(scene.activeCamera->cameraPos - scene.activeCamera->cameraSpeed * scene.activeCamera->cameraFront);
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            g_camera->setCameraPos(g_camera->cameraPos - g_camera->cameraSpeed * glm::normalize(glm::cross(g_camera->cameraFront, g_camera->cameraUp)));
+            scene.activeCamera->setCameraPos(scene.activeCamera->cameraPos - scene.activeCamera->cameraSpeed * glm::normalize(glm::cross(scene.activeCamera->cameraFront, scene.activeCamera->cameraUp)));
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            g_camera->setCameraPos(g_camera->cameraPos + g_camera->cameraSpeed * glm::normalize(glm::cross(g_camera->cameraFront, g_camera->cameraUp)));
+            scene.activeCamera->setCameraPos(scene.activeCamera->cameraPos + scene.activeCamera->cameraSpeed * glm::normalize(glm::cross(scene.activeCamera->cameraFront, scene.activeCamera->cameraUp)));
         }
         // Additional processing for mouse
         double xpos, ypos;

@@ -86,7 +86,7 @@ float near_plane = 0.1f, far_plane = 50.0f; // for shadow mapping
 
 
 // for selected nodes
-std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected rigid body pointer
+std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected Node pointer
 
 Scene scene;
 
@@ -211,7 +211,7 @@ int main() {
     // test blender import
     // Import a model with textures
 
-    std::string modelPath = getProjectRoot() + "/blender/carpet.gltf";
+    std::string modelPath = getProjectRoot() + "/blender/backrooms2.glb";
 
     ModelImporter importer;
     bool showUVs = false;

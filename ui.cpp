@@ -22,7 +22,14 @@
 bool isMenuOpen = false;
 MenuSystem* MenuSystem::instance = nullptr;
 
+extern Scene scene;
+
 void toggleMenu() {
+    // disable walk navigation if enabled
+    if (scene.activeCamera) {
+        scene.activeCamera->camstate = false;
+    }
+
     MenuSystem::getInstance().toggle();
     if (MenuSystem::getInstance().isMenuOpen()) {
         glfwSetInputMode(glfwGetCurrentContext(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
