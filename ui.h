@@ -6,6 +6,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "scene.h"
+#include "fileDialog.h"
+#include "modelImporter.h"
 
 
 
@@ -23,12 +25,12 @@
 void toggleMenu();
 void initImGui(GLFWwindow* window);
 void cleanupImGui();
-void createSphere();
 
 // forward declerations
 // class Scene;
 extern Scene scene; // Declare the external scene variable that appears in GameEngine.cpp
-extern std::shared_ptr<PhysXBody> selectedRB; // Selected rigid body pointer
+extern std::shared_ptr<Node> selectedNode; // Selected node pointer
+
 
 class MenuSystem {
 private:
@@ -134,7 +136,37 @@ public:
 
                     if (ImGui::TreeNode("Objects")) {
                         static std::shared_ptr<Node> selectedNode = nullptr;
+                        static bool showCreateWindow = false;
+                        static bool showFileDialog = false;
+                        static glm::vec3 importPosition(0.0f);
 
+                        // Create and Delete buttons at the top
+                        ImGui::BeginGroup();
+                        if (ImGui::Button("Create Object", ImVec2(120, 25))) {
+                            showCreateWindow = true;
+                        }
+
+                        ImGui::SameLine();
+                        ImGui::BeginDisabled(selectedNode == nullptr);
+                        if (ImGui::Button("Delete Object", ImVec2(120, 25))) {
+                            // Remove from physics world if it has physics
+                            auto physBody = findPhysicsBody(scene, selectedNode);
+                            if (physBody) {
+                                auto& bodies = scene.physicsWorld.bodies;
+                                bodies.erase(std::remove(bodies.begin(), bodies.end(), physBody), bodies.end());
+                            }
+
+                            // Remove from scene nodes
+                            auto& nodes = scene.sceneNodes;
+                            nodes.erase(std::remove(nodes.begin(), nodes.end(), selectedNode), nodes.end());
+
+                            selectedNode = nullptr;
+                        }
+                        ImGui::EndDisabled();
+                        ImGui::EndGroup();
+                        ImGui::Separator();
+
+                        // Objects Table
                         if (ImGui::BeginTable("Objects Table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                             ImGui::TableSetupColumn("ID");
                             ImGui::TableSetupColumn("Name");
@@ -151,8 +183,7 @@ public:
                                 sprintf(label, "%zu", i);
                                 if (ImGui::Selectable(label, selectedNode == node, ImGuiSelectableFlags_SpanAllColumns)) {
                                     selectedNode = node;
-                                    selectedRB = findPhysicsBody(scene, node);
-                                    selectedMaterial = nullptr; // Reset material selection when new node is selected
+                                    selectedMaterial = nullptr;
                                 }
 
                                 ImGui::TableNextColumn();
@@ -167,6 +198,109 @@ public:
                             }
                             ImGui::EndTable();
                         }
+
+                        // Create Object Window
+                        if (showCreateWindow) {
+                            ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
+                            if (ImGui::Begin("Create Object", &showCreateWindow)) {
+                                static int selectedType = 0;
+                                static const char* types[] = { "Sphere", "Box", "Cylinder" };
+                                static glm::vec3 position(0.0f);
+                                static bool isDynamic = true;
+                                static float sphereRadius = 1.0f;
+                                static float boxDimensions[3] = { 1.0f, 1.0f, 1.0f };
+                                static float cylinderRadius = 0.5f;
+                                static float cylinderHeight = 1.0f;
+
+                                ImGui::Combo("Type", &selectedType, types, IM_ARRAYSIZE(types));
+                                ImGui::DragFloat3("Position", &position.x, 0.1f);
+                                ImGui::Checkbox("Dynamic (Physics)", &isDynamic);
+
+                                switch (selectedType) {
+                                case 0: // Sphere
+                                    ImGui::DragFloat("Radius", &sphereRadius, 0.1f, 0.1f, 10.0f);
+                                    break;
+                                case 1: // Box
+                                    ImGui::DragFloat3("Dimensions", boxDimensions, 0.1f, 0.1f, 10.0f);
+                                    break;
+                                case 2: // Cylinder
+                                    ImGui::DragFloat("Radius", &cylinderRadius, 0.1f, 0.1f, 10.0f);
+                                    ImGui::DragFloat("Height", &cylinderHeight, 0.1f, 0.1f, 10.0f);
+                                    break;
+                                }
+
+                                if (ImGui::Button("Create", ImVec2(120, 30))) {
+                                    std::shared_ptr<Node> newNode;
+                                    switch (selectedType) {
+                                    case 0:
+                                        newNode = std::make_shared<SphereNode>(sphereRadius);
+                                        break;
+                                    case 1:
+                                        newNode = std::make_shared<BoxNode>(
+                                            boxDimensions[0], boxDimensions[1], boxDimensions[2]);
+                                        break;
+                                    case 2:
+                                        newNode = std::make_shared<CylinderNode>(
+                                            cylinderRadius, cylinderHeight);
+                                        break;
+                                    }
+
+                                    newNode->setWorldPosition(position);
+
+                                    if (isDynamic) {
+                                        auto physBody = std::make_shared<PhysXBody>(newNode, false);
+                                        scene.addPhysicsBody(physBody);
+                                    }
+                                    else {
+                                        scene.addNode(newNode);
+                                    }
+
+                                    showCreateWindow = false;
+                                }
+
+                                ImGui::SameLine();
+                                if (ImGui::Button("Import Model...", ImVec2(120, 30))) {
+                                    showFileDialog = true;
+                                    importPosition = position; // Store position for imported model
+                                }
+
+                                ImGui::End();
+                            }
+                        }
+
+                        
+                        // File Dialog Window
+                        if (showFileDialog) {
+                            if (FileDialog::showFileDialog("Import Model", { ".glb", ".fbx" })) {
+                                std::string selectedFile = FileDialog::getSelectedFile();
+                                if (!selectedFile.empty()) {
+                                    ModelImporter importer;
+                                    auto importedNode = importer.importGLB(selectedFile);
+                                    if (importedNode) {
+                                        importedNode->setWorldPosition(importPosition);
+                                        scene.addNode(importedNode);
+                                        showCreateWindow = false;
+                                    }
+                                    else {
+                                        // Show error message
+                                        ImGui::OpenPopup("Import Error");
+                                    }
+                                }
+                                showFileDialog = false;
+                                FileDialog::clearSelection();
+                            }
+                        }
+
+                        // Import Error Popup
+                        if (ImGui::BeginPopupModal("Import Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                            ImGui::Text("Failed to import model!");
+                            ImGui::Text("Error: %s", ModelImporter().getLastError().c_str());
+                            if (ImGui::Button("OK", ImVec2(120, 0))) {
+                                ImGui::CloseCurrentPopup();
+                            }
+                            ImGui::EndPopup();
+                        }
+                        
 
                         if (selectedNode) {
                             ImGui::SetNextWindowPos(ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowWidth(), ImGui::GetWindowPos().y));
@@ -276,6 +410,7 @@ public:
                                 }
                             }
 
+                            // Show physics properties if the node has a physics body
                             auto physBody = findPhysicsBody(scene, selectedNode);
                             if (physBody && ImGui::CollapsingHeader("Physics", ImGuiTreeNodeFlags_DefaultOpen)) {
                                 ImGui::Text("Mass: %.2f", physBody->getMass());
@@ -351,15 +486,6 @@ public:
                         ImGui::TreePop();
                     }
 
-                    if (ImGui::TreeNode("Add Sphere")) {
-                        ImGui::DragFloat("Radius", &sphereRadius, 0.1f, 0.1f, 10.0f);
-                        ImGui::DragFloat3("Position", &sphereCenter.x, 0.1f);
-
-                        if (ImGui::Button("Create Sphere", ImVec2(120, 30))) {
-                            createSphere();
-                        }
-                        ImGui::TreePop();
-                    }
 
                     ImGui::EndChild();
                     ImGui::EndTabItem();
@@ -412,55 +538,7 @@ public:
                     ImGui::EndTabItem();
                 }
 
-                if (ImGui::BeginTabItem("Selected Object")) {
-                    ImGui::BeginChild("SelectedObjectTab", ImVec2(0, 0), true);
-
-                    if (selectedRB) {
-                        ImGui::Text("Selected Object Properties");
-                        ImGui::Separator();
-
-                        // Position
-                        glm::vec3 pos = selectedRB->getPosition();
-                        ImGui::Text("Position: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-
-                        // Mass
-                        float mass = selectedRB->getMass();
-                        ImGui::Text("Mass: %.2f", mass);
-
-                        // Velocity
-                        glm::vec3 vel = selectedRB->getVelocity();
-                        ImGui::Text("Velocity: (%.2f, %.2f, %.2f)",
-                            vel.x,
-                            vel.y,
-                            vel.z);
-
-                        // Angular 
-                        glm::vec3 angVel = selectedRB->getAngularVelocity();
-                        ImGui::Text("Angular Velocity: (%.2f, %.2f, %.2f)",
-                            angVel.x,
-                            angVel.y,
-                            angVel.z);
-
-                        // Linear momentum
-                        glm::vec3 linearMomentum = vel * mass;
-                        ImGui::Text("Linear Momentum: (%.2f, %.2f, %.2f)",
-                            linearMomentum.x, linearMomentum.y, linearMomentum.z);
-
-                        // Angular momentum
-                        glm::vec3 angularMomentum = selectedRB->getAngularVelocity();
-                        ImGui::Text("Angular Momentum: (%.2f, %.2f, %.2f)",
-                            angularMomentum.x,
-                            angularMomentum.y,
-                            angularMomentum.z);
-                    }
-                    else {
-                        ImGui::Text("No object selected");
-                        ImGui::Text("Click on an object to select it");
-                    }
-
-                    ImGui::EndChild();
-                    ImGui::EndTabItem();
-                }
+              
 
                 ImGui::EndTabBar();
             }

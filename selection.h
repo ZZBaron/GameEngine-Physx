@@ -6,6 +6,7 @@
 #include "PhysXBody.h"
 #include "PhysXWorld.h"
 #include "object3D.h"
+#include "scene.h"
 
 struct Ray {
     glm::vec3 origin;
@@ -18,20 +19,20 @@ class SelectionSystem {
 private:
     std::shared_ptr<Camera> camera;
     static SelectionSystem* instance;
-    std::shared_ptr<PhysXBody> selectedBody;
+    std::shared_ptr<Node> selectedNode;
 
 public:
     static SelectionSystem& getInstance();
-    std::shared_ptr<PhysXBody> getSelectedBody() const { return selectedBody; }
+    std::shared_ptr<Node> getSelectedNode() const { return selectedNode; }
 
     Ray screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight,
         const glm::mat4& projection, const glm::mat4& view);
 
     bool handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
-        const glm::mat4& projection, const glm::mat4& view, PhysXWorld& physicsWorld);
+        const glm::mat4& projection, const glm::mat4& view, Scene& scene);
 
 private:
-    SelectionSystem() : selectedBody(nullptr) {}
+    SelectionSystem() : selectedNode(nullptr) {}
 
     struct IntersectionResult {
         bool hit;

@@ -1,5 +1,6 @@
 // selection.cpp
 #include "selection.h"
+#include "scene.h"
 
 SelectionSystem* SelectionSystem::instance = nullptr;
 
@@ -95,22 +96,19 @@ SelectionSystem::IntersectionResult SelectionSystem::rayIntersectMesh(
 }
 
 bool SelectionSystem::handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
-    const glm::mat4& projection, const glm::mat4& view, PhysXWorld& physicsWorld) {
-
+    const glm::mat4& projection, const glm::mat4& view, Scene& scene) {
     Ray ray = screenToWorldRay(mouseX, mouseY, screenWidth, screenHeight, projection, view);
     float closestDistance = std::numeric_limits<float>::max();
-    std::shared_ptr<PhysXBody> closestBody = nullptr;
+    std::shared_ptr<Node> closestNode = nullptr;
 
-    for (const auto& body : physicsWorld.bodies) {
-        auto node = body->getNode();
+    for (const auto& node : scene.sceneNodes) {
         auto result = rayIntersectMesh(ray, node);
-
         if (result.hit && result.distance < closestDistance) {
             closestDistance = result.distance;
-            closestBody = body;
+            closestNode = node;
         }
     }
 
-    selectedBody = closestBody;
-    return selectedBody != nullptr;
+    selectedNode = closestNode;
+    return selectedNode != nullptr;
 }

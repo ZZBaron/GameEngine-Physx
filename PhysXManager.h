@@ -53,6 +53,8 @@ public:
         dispatcher = PxDefaultCpuDispatcherCreate(2);
         sceneDesc.cpuDispatcher = dispatcher;
         sceneDesc.filterShader = PxDefaultSimulationFilterShader;
+
+
         scene = physics->createScene(sceneDesc);
 
         return true;

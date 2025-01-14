@@ -4,6 +4,8 @@
 #include "camera.h"
 #include "PhysXWorld.h"
 #include "shadowRenderer.h"
+#include "player.h"
+#include "UVviewer.h"
 
 
 class Scene {
@@ -45,16 +47,21 @@ public:
 	glm::vec3 ambientLight;
 	std::vector<std::shared_ptr<Node>> lights;
 
+    // for first person player mode
+    Player player;
+    bool playerMode = false;
+
+    // for mapping uv's
+    UVViewer uvViewer;
+    bool showUVs = false;
+
 	Scene() : ambientLight(0.1f, 0.1f, 0.1f) {
 		// Create and set up default camera
-		auto defaultCamera = std::make_shared<Camera>();
+		auto defaultCamera = std::make_shared<Camera>("Default");
 		cameras.push_back(defaultCamera);
 		activeCamera = defaultCamera;
-
-        shadowRenderer.shadowsEnabled = false;
 	}
 
-    // Draw
 
 
     // Node Management
@@ -157,49 +164,141 @@ public:
         glm::mat4 view = activeCamera->getViewMatrix();
         glm::mat4 projection = activeCamera->getProjectionMatrix();
 
-        // glClearColor(0.2f, 0.2f, 0.2f, 1.0f); Can be useful for debug to clearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // 1. Shadow pass
-        shadowRenderer.renderShadowPass(sceneNodes);
+        // Separate opaque and transparent objects
+        std::vector<std::shared_ptr<Node>> opaqueNodes;
+        std::vector<std::shared_ptr<Node>> transparentNodes;
 
-        // Set viewport back after shadows
+        for (const auto& node : sceneNodes) {
+            if (node->mesh && node->visible) {
+                bool isTransparent = false;
+                for (const auto& material : node->mesh->materials) {
+                    if (material && material->alpha < 1.0f) {
+                        isTransparent = true;
+                        break;
+                    }
+                }
+                if (isTransparent) {
+                    transparentNodes.push_back(node);
+                }
+                else {
+                    opaqueNodes.push_back(node);
+                }
+            }
+        }
+
+        // 1. First render shadow map
+        shadowRenderer.renderShadowPass(opaqueNodes);  // Only render opaque objects to shadow map
+
+        // 2. Reset viewport and render opaque objects with shadows
         glViewport(0, 0, screenWidth, screenHeight);
-
-
-        shadowRenderer.prepareMainPass(view, projection, activeCamera->cameraPos);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
 
         if (drawObjects) {
-            shadowRenderer.renderMainPass(sceneNodes, view, projection);
+            
+
+            //if (drawWireframes) {
+            //    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            //}
+            //
+            //if (drawObjects) {
+            //    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            //}
+
+
+            shadowRenderer.prepareMainPass(view, projection, activeCamera->cameraPos);
+
+            shadowRenderer.renderMainPass(opaqueNodes, view, projection);
+
+            // 3. Render transparent objects with special settings
+            if (!transparentNodes.empty()) {
+                // Sort transparent objects back-to-front
+                std::sort(transparentNodes.begin(), transparentNodes.end(),
+                    [&](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
+                        glm::vec3 cameraPos = activeCamera->cameraPos;
+                        float distA = glm::length(cameraPos - a->getWorldPosition());
+                        float distB = glm::length(cameraPos - b->getWorldPosition());
+                        return distA > distB;  // Sort back to front
+                    });
+
+                // Enable blending for transparent objects
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glDepthMask(GL_FALSE);
+
+
+                shadowRenderer.renderMainPass(transparentNodes, view, projection);
+
+                // Reset states
+                glDepthMask(GL_TRUE);
+                glDisable(GL_BLEND);
+
+            }
         }
 
         if (drawWireframes) {
             drawWireFrames();
         }
 
-        glUseProgram(shadowRenderer.getMainShaderProgram());
 
-        //draw axes
+
+
+        glUseProgram(shadowRenderer.getMainShaderProgram());
     }
 
     void drawWireFrames() {
-        // Wireframe pass
-        glUseProgram(0);  // Disable shaders
+        // Save current shader program
+        GLint currentProgram;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
 
+        // Disable the main shader and switch to a basic shader for wireframes
+        glUseProgram(0);
+
+        // Save current polygon mode
+        GLint previousPolygonMode[2];
+        glGetIntegerv(GL_POLYGON_MODE, previousPolygonMode);
+
+        // Enable wireframe mode to call each drawWireframe
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        // Set up matrices in fixed-function pipeline
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(glm::value_ptr(activeCamera->getProjectionMatrix()));
 
-        glMatrixMode(GL_MODELVIEW);
-        glLoadMatrixf(glm::value_ptr(activeCamera->getViewMatrix()));
+        
 
+        // Draw each wireframe
         for (const auto& node : sceneNodes) {
-            if (node->mesh) {
-                glPushMatrix();
-                glMultMatrixf(glm::value_ptr(node->worldTransform));
+            if (node->mesh && node->visible) {
+                glMatrixMode(GL_MODELVIEW);
+                glLoadMatrixf(glm::value_ptr(activeCamera->getViewMatrix() * node->worldTransform));
                 node->mesh->drawWireframe();
-                glPopMatrix();
             }
         }
+
+        // Restore original states
+        glPolygonMode(GL_FRONT, previousPolygonMode[0]);
+        glPolygonMode(GL_BACK, previousPolygonMode[1]);
+
+        // Restore previous shader program
+        glUseProgram(currentProgram);
+    }
+
+    void togglePlayer() {
+        playerMode = !playerMode;
+        
+        if (playerMode) {
+            activeCamera = player.camera;
+        }
+        else {
+            //default camera
+            activeCamera = cameras[0];
+        }
+
+
     }
 
 };

@@ -2,14 +2,13 @@
 #pragma once
 #include "GameEngine.h"
 
-
 class Shader
 {
 public:
     // the program ID
     unsigned int ID;
 
-    // constructor reads and builds the shader
+    // constructor that reads from files
     Shader(const char* vertexPath, const char* fragmentPath)
     {
         // 1. retrieve the vertex/fragment source code from filePath
@@ -40,9 +39,19 @@ public:
         {
             std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
         }
-        const char* vShaderCode = vertexCode.c_str();
-        const char* fShaderCode = fragmentCode.c_str();
-        // 2. compile shaders
+
+        createShader(vertexCode.c_str(), fragmentCode.c_str());
+    }
+
+    // constructor that takes shader source directly
+    Shader(const char* vertexSource, const char* fragmentSource, bool fromSource) {
+        if (fromSource) {
+            createShader(vertexSource, fragmentSource);
+        }
+    }
+
+private:
+    void createShader(const char* vShaderCode, const char* fShaderCode) {
         unsigned int vertex, fragment;
         int success;
         char infoLog[512];
@@ -60,18 +69,16 @@ public:
         };
 
         // similiar for Fragment Shader
-		fragment = glCreateShader(GL_FRAGMENT_SHADER);
-		glShaderSource(fragment, 1, &fShaderCode, NULL);
-		glCompileShader(fragment);
-		// print compile errors if any
-		glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-		if (!success)
-		{
-			glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-			std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-		};
-
-
+        fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment, 1, &fShaderCode, NULL);
+        glCompileShader(fragment);
+        // print compile errors if any
+        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+        if (!success)
+        {
+            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+            std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+        };
 
         // shader Program
         ID = glCreateProgram();
@@ -89,8 +96,9 @@ public:
         // delete the shaders as they're linked into our program now and no longer necessary
         glDeleteShader(vertex);
         glDeleteShader(fragment);
-    };
+    }
 
+public:
     void use()
     {
         glUseProgram(ID);
@@ -107,14 +115,13 @@ public:
     {
         glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
     }
-	void setMat4(const std::string& name, const glm::mat4& mat) const
-	{
-		glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
-	}
-	unsigned int getShaderProgram() {
-		return ID;
-	}
-
+    void setMat4(const std::string& name, const glm::mat4& mat) const
+    {
+        glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
+    }
+    unsigned int getShaderProgram() {
+        return ID;
+    }
 };
 
 //Shader ourShader("path/to/shaders/shader.vs", "path/to/shaders/shader.fs");

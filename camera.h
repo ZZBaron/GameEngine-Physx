@@ -5,21 +5,30 @@
 // Define initial camera parameters
 class Camera {
 public:
+	std::string name;
+
 	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
 	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-	//screen parameters
+	//screen parameters for camera
 	int screenWidth = 1792;
 	int screenHeight = 1008;
+	float near = 0.1f;
+	float far = 100.0f;
 
-	glm::mat4 projectionMatrix = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+	glm::mat4 projectionMatrix = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, near, far);
 
 	float cameraSpeed = 0.1f; // Speed of camera movement
 	float yaw = -90.0f;// Yaw angle
 	float pitch = 0.0f; // Pitch angle
 	float sensitivity = 0.1f; // Mouse sensitivity
 	bool camstate = false; // camera can be moved with controls in input.cpp when true
+
+	Camera (std::string name) :
+		name(name) {
+	}
+
 
 	void setYaw(float newYaw) {
 		yaw = newYaw;

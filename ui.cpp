@@ -79,8 +79,3 @@ void cleanupImGui() {
 
 
 
-void createSphere() {
-    // Your sphere creation logic
-    std::cout << "Sphere created!" << std::endl;
-}
-

@@ -12,6 +12,5 @@ void press_once_noargs(GLFWwindow* window, int key, void(*func)());
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-void setActiveCamera(std::shared_ptr<Camera> camera);
 
 

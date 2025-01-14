@@ -24,8 +24,11 @@ public:
     std::shared_ptr<Node> node;
     bool isStatic;
 
+    std::vector<std::shared_ptr<Node>> compoundParts; // For compound bodies
+
     // bounding sphere for broad phase collisions
     BoundingSphere boundingSphere;
+
 
     PhysXBody(std::shared_ptr<Node> nodePtr, bool staticBody = false)
         : node(nodePtr), isStatic(staticBody) {
@@ -33,6 +36,14 @@ public:
         createActor();
         updateBoundingSphere();
     }
+
+    // Constructor for compound bodies
+    PhysXBody(std::shared_ptr<Node> rootNode, const std::vector<std::shared_ptr<Node>>& parts, bool staticBody = false)
+        : node(rootNode), compoundParts(parts), isStatic(staticBody) {
+        node->updateWorldTransform();
+        createCompoundActor();
+    }
+
 
     void createActor() {
         std::cout << "\n=== PhysXBody::createActor() ===\n";
@@ -71,6 +82,20 @@ public:
         }
         else {
             PxRigidDynamic* dynamicActor = physics->createRigidDynamic(transform);
+
+            // setSolverIterationCounts(minPositionIters, minVelocityIters)
+            // - minPositionIters: Number of iterations for resolving position constraints (4-8 typical)
+            //   Higher values = more accurate collision resolution but more CPU cost
+            //   Lower values = faster but less stable stacking/resting contacts
+            // - minVelocityIters: Number of iterations for resolving velocity constraints (1-2 typical)
+            //   Higher values = more accurate friction/restitution but more CPU cost
+            //   Most scenarios work fine with just 1-2 velocity iterations
+            dynamicActor->setSolverIterationCounts(4, 1);  // Default values, more stable for many-body contacts
+
+            // Add linear and angular damping to dissipate energy
+            dynamicActor->setLinearDamping(0.5f);    // Range 0-1, helps calm linear vibration
+            dynamicActor->setAngularDamping(0.5f);   // Range 0-1, helps calm rotational vibration
+
             PxRigidBodyExt::updateMassAndInertia(*dynamicActor, 1.0f);
             actor = dynamicActor;
         }
@@ -85,6 +110,43 @@ public:
         PhysXManager::getInstance().getScene()->addActor(*actor);
 
         delete geometry;
+    }
+
+    void createCompoundActor() {
+        PxPhysics* physics = PhysXManager::getInstance().getPhysics();
+
+        // Create transform from root node's world transform
+        glm::vec3 position = glm::vec3(node->worldTransform[3]);
+        glm::quat orientation = glm::quat_cast(glm::mat3(node->worldTransform));
+
+        PxTransform transform(
+            PxVec3(position.x, position.y, position.z),
+            PxQuat(orientation.x, orientation.y, orientation.z, orientation.w)
+        );
+
+        // Create actor
+        if (isStatic) {
+            actor = physics->createRigidStatic(transform);
+        }
+        else {
+            PxRigidDynamic* dynamicActor = physics->createRigidDynamic(transform);
+            actor = dynamicActor;
+        }
+
+        // Create material
+        PxMaterial* material = physics->createMaterial(0.5f, 0.5f, 0.6f);
+
+        // Attach shapes for each part
+        for (const auto& part : compoundParts) {
+            attachNodeShape(part.get(), material);
+        }
+
+        // Update mass properties for dynamic bodies
+        if (!isStatic && actor->is<PxRigidDynamic>()) {
+            PxRigidBodyExt::updateMassAndInertia(*actor->is<PxRigidDynamic>(), 1.0f);
+        }
+
+        PhysXManager::getInstance().getScene()->addActor(*actor);
     }
 
     void updateNode() {
@@ -224,6 +286,62 @@ private:
         }
     }
 
+    void attachNodeShape(Node* node, PxMaterial* material) {
+        if (!node) return;
+
+        PxPhysics* physics = PhysXManager::getInstance().getPhysics();
+        PxGeometry* geometry = nullptr;
+
+        // Get local transform relative to root
+        glm::mat4 relativeTransform = glm::inverse(this->node->worldTransform) * node->worldTransform;
+        glm::vec3 localPos = glm::vec3(relativeTransform[3]);
+        glm::quat localRot = glm::quat_cast(glm::mat3(relativeTransform));
+        glm::vec3 localScale = node->localScale; // Consider scale if needed
+
+        // Create appropriate geometry based on node type
+        switch (node->type) {
+        case NodeType::Sphere: {
+            auto sphereNode = static_cast<SphereNode*>(node);
+            geometry = new PxSphereGeometry(sphereNode->radius);
+            break;
+        }
+        case NodeType::Box: {
+            auto boxNode = static_cast<BoxNode*>(node);
+            geometry = new PxBoxGeometry(
+                boxNode->width * 0.5f,
+                boxNode->height * 0.5f,
+                boxNode->depth * 0.5f
+            );
+            break;
+        }
+        case NodeType::Cylinder: {
+            // Add cylinder support if needed
+            break;
+        }
+        default:
+            // Default to bounding box for unknown types
+            if (node->mesh) {
+                glm::vec3 halfExtents = computeBoxHalfExtents(node->mesh.get());
+                geometry = new PxBoxGeometry(halfExtents.x, halfExtents.y, halfExtents.z);
+            }
+            break;
+        }
+
+        if (geometry) {
+            // Create and attach shape with local transform
+            PxTransform localTransform(
+                PxVec3(localPos.x, localPos.y, localPos.z),
+                PxQuat(localRot.x, localRot.y, localRot.z, localRot.w)
+            );
+
+            PxShape* shape = physics->createShape(*geometry, *material);
+            shape->setLocalPose(localTransform);
+            actor->attachShape(*shape);
+
+            delete geometry;
+        }
+    }
+
     PxGeometry* createTriangleMeshGeometry() {
         if (!node->mesh) return nullptr;
 
@@ -331,5 +449,17 @@ private:
         }
 
         return (maxExtents - minExtents) * 0.5f;
+    }
+};
+
+// Helper class for creating compound bodies
+class CompoundBodyBuilder {
+public:
+    static std::shared_ptr<PhysXBody> createCompoundBody(
+        std::shared_ptr<Node> rootNode,
+        const std::vector<std::shared_ptr<Node>>& parts,
+        bool isStatic = false)
+    {
+        return std::make_shared<PhysXBody>(rootNode, parts, isStatic);
     }
 };

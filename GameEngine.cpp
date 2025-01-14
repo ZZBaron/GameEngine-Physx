@@ -19,8 +19,11 @@
 #include "primitveNodes.h"
 #include "scene.h"
 #include "modelImporter.h"
-#include "lineParameterization.h"
+#include "curveParameterization.h"
 #include "Nodes\tube.h"
+#include "Nodes\bin.h"
+#include "surfaceParameterization.h"
+
 
 // Specify shader paths
 
@@ -65,7 +68,6 @@ float deltaTime_sim = 0.0f; // Time difference between frames for simulation
 //debugging
 GLuint debugDepthShaderProgram; // for rendering depth map to quad
 
-bool shadowsEnabled = true; // enable shadows
 
 //text shaders
 GLuint textShaderProgram;
@@ -83,8 +85,8 @@ glm::mat4 lightSpaceMatrix;
 float near_plane = 0.1f, far_plane = 50.0f; // for shadow mapping
 
 
-// for selected objects
-std::shared_ptr<PhysXBody> selectedRB = nullptr; // Initialize selected rigid body pointer
+// for selected nodes
+std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected rigid body pointer
 
 Scene scene;
 
@@ -99,6 +101,9 @@ void setupScene() {
         mainVetexShaderPATH, mainFragmentShaderPATH);
     scene.shadowRenderer.setLightProperties(lightPos, lightColor, luminousPower);
     scene.shadowRenderer.setShadowProperties(near_plane, far_plane);
+
+    scene.uvViewer.initialize();
+
 
     debugDepthShaderProgram = initDebugDepthShader(); // for rendering depth map to quad
 
@@ -206,34 +211,36 @@ int main() {
     // test blender import
     // Import a model with textures
 
-    std::string modelPath = getProjectRoot() + "/blender/Dragon_2.6_Cycles.glb";
+    std::string modelPath = getProjectRoot() + "/blender/carpet.gltf";
 
     ModelImporter importer;
+    bool showUVs = false;
 
-     // auto model = importer.importGLB(modelPath);
-     // if (model) {
-     //     //model->localScale = glm::vec3(0.01f, 0.01f, 0.01f);
-     //     //model->updateWorldTransform();
-     //     scene.addNode(model);
-     // }
-     // else {
-     //     std::cout << "Import failed: " << importer.getLastError() << std::endl;
-     // }
+    auto model = importer.importGLB(modelPath);
+    if (model) {
+        //model->localScale = glm::vec3(0.01f, 0.01f, 0.01f);
+        //model->updateWorldTransform();
+        scene.addNode(model);
+
+
+
+        // for viewing uv's
+        scene.uvViewer.setupMeshUVs(model->mesh);
+
+        showUVs = false;
+    }
+    else {
+        std::cout << "Import failed: " << importer.getLastError() << std::endl;
+    }
 
 
     auto lightVisualizer = std::make_shared<SphereNode>(0.1f, 10, 10);
     lightVisualizer->setWorldPosition(lightPos);
 
-    // Define your bounding box for sphere generation
-    glm::vec3 boxMin(1.0f, 1.0f, 1.0f);  // Adjust as needed
-    glm::vec3 boxMax(2.0f, 2.0f, 2.0f);   // Adjust as needed
-
-    float shapeGenerationInterval = 0.1f;  // Generate spheres every 1 second
-    float timeSinceLastGeneration = 0.0f;
 
     //tube stuff
     // Using parametric curve
-    auto curve = LineParameterization(
+    auto curve = CurveParameterization(
         [](float t) { return glm::vec3(t, sin(t), cos(t)); },
         0.0f, 2.0f * glm::pi<float>()
     );
@@ -253,6 +260,98 @@ int main() {
 
     scene.addNode(tubeFromCurve);
 
+    //testing surfaces
+    // Create wavy ground using multiple sine waves for interesting terrain
+    auto wavyGroundSurface = SurfaceParameterization(
+        [](float u, float v) -> glm::vec3 {
+            // Scale u,v to create a larger ground plane (-10 to 10 in x,z)
+            float x = (u - 0.5f) * 200.0f;
+            float z = (v - 0.5f) * 200.0f;
+
+            // Helper function to compute height at any point
+            auto getHeight = [](float x, float z) -> float {
+                float y = 0.0f;
+                // Simplified wave pattern for clearer lighting
+                y += sin(x * 0.5f) * 1.0f;          // X wave
+                y += sin(z * 0.5f) * 1.0f;          // Z wave
+                y += sin(x * 1.2f + z * 1.2f) * 0.3f;  // Diagonal wave
+                return y;
+                };
+
+            // Get the height at current point
+            float y = getHeight(x, z);
+
+            // Calculate exact normals using partial derivatives (dy/dx and dy/dz)
+            const float epsilon = 0.01f;  // Small step for numerical derivatives
+            float hL = getHeight(x - epsilon, z);  // Left point
+            float hR = getHeight(x + epsilon, z);  // Right point
+            float hD = getHeight(x, z - epsilon);  // Down point
+            float hU = getHeight(x, z + epsilon);  // Up point
+
+            // Calculate partial derivatives
+            float dydx = (hR - hL) / (2.0f * epsilon);  // dy/dx
+            float dydz = (hU - hD) / (2.0f * epsilon);  // dy/dz
+
+            return glm::vec3(x, y, z);
+        }
+    );
+
+    // Create surface parameters with higher resolution for smoother waves
+    ParametricSurfaceNode::SurfaceParameters surfaceParams;
+    surfaceParams.uSegments = 500;  // Increase resolution
+    surfaceParams.vSegments = 500;
+    surfaceParams.generateNormals = true;  // Important for lighting
+    surfaceParams.generateUVs = false;      // For texturing
+
+    // Create the node
+    auto wavyGroundNode = std::make_shared<ParametricSurfaceNode>(wavyGroundSurface, surfaceParams);
+    wavyGroundNode->mesh->flipNormals();
+    wavyGroundNode->setWorldPosition(glm::vec3(0.0f, -5.0f, 0.0f));
+
+    // Create a material with a blue-green color
+    auto groundMaterial = std::make_shared<Material>();
+    groundMaterial->baseColor = glm::vec3(0.2f, 0.5f, 0.7f);  // Blue-green color
+    groundMaterial->roughness = 0.7f;  // More matte appearance
+    groundMaterial->metallic = 0.01f;   // Non-metallic
+    groundMaterial->specular = 0.35f;   // Slight specular highlight
+
+    wavyGroundNode->mesh->materials[0] = groundMaterial;
+
+    // Add to scene
+    scene.addNode(wavyGroundNode);
+
+
+    //testing binBody
+    auto binNode = std::make_shared<BinNode>(4.0f, 3.0f, 4.0f);
+    binNode->setWorldPosition(glm::vec3(0.0f, 5.0f, 0.0f));
+
+    // Create glass material
+    auto glassMaterial = std::make_shared<Material>();
+    glassMaterial->baseColor = glm::vec3(0.2f, 0.3f, 0.4f);  // Light blue tint to make it visible
+    glassMaterial->transmission = 0.9f;  // transparent
+    glassMaterial->ior = 1.52f;         // Typical glass IOR
+    glassMaterial->roughness = 0.01f;    // Smooth surface
+    glassMaterial->specular = 1.0f;      // Increased for more visible reflections
+    glassMaterial->alpha = 0.2f;         // More transparent
+    glassMaterial->metallic = 0.0f;      // Make sure it's not metallic
+    glassMaterial->emission = glm::vec3(0.0f); // Make sure it's not emissive
+
+    // Apply to all walls
+    binNode->setMaterial(glassMaterial);
+
+    auto binBody = std::make_shared<BinBody>(binNode, true);  // true for static
+    scene.addPhysicsBody(binBody, "my_bin");
+
+    // Define bounding box for sphere generation
+    glm::vec3 boxMin(0.0f, 0.0f, 0.0f);  
+    glm::vec3 boxMax(1.0f, 1.0f, 1.0f);   
+    boxMin += glm::vec3(0.0f, 5.0f, 0.0f);
+    boxMax += glm::vec3(0.0f, 5.0f, 0.0f);
+
+    float shapeGenerationInterval = 0.1f;  // Generate spheres every _ seconds
+    float timeSinceLastGeneration = 0.0f;
+
+
     // Main loop
     while (!glfwWindowShouldClose(window)) {
 
@@ -264,11 +363,8 @@ int main() {
         deltaTime_sim = simSpeed * deltaTime_sys; // is this right? use sys for now
         startTime_sys = currentTime; // Update start time for next frame
 
-        processInput(window);  // Process keyboard input
+        processInput(window);  // Process keyboard and mouse input
         
-        // Update physics simulation
-        // scene.physicsWorld.updateSimulation(deltaTime_sys);
-
         scene.update(deltaTime_sys);
 
          // Generate random spheres
@@ -291,8 +387,17 @@ int main() {
        
 
         // Debug visualization: render depth map to quad
-        glViewport(0, 0, screenWidth / 4, screenHeight / 4);
-        renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(), scene.shadowRenderer.getLightSpaceMatrix(),near_plane, far_plane);
+        // glViewport(0, 0, screenWidth / 4, screenHeight / 4);
+        // renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(), scene.shadowRenderer.getLightSpaceMatrix(),near_plane, far_plane);
+        // 
+        // glViewport(0, 0, screenWidth, screenHeight);
+
+
+        // uv debug
+        if (showUVs) {  
+            GLuint textureId = model->mesh->materials[0]->textureMaps["baseColor"].textureId;
+            scene.uvViewer.render(textureId);
+        }
 
 
         //draw menu after objects

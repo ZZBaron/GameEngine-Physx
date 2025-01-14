@@ -34,15 +34,12 @@ void generateRandomSpheres(Scene& scene,
 
         // Create sphere
 
-        auto sphereNode = std::make_shared<SphereNode>(1.0f, 20, 20);
+        auto sphereNode = std::make_shared<SphereNode>(radius, 20, 20);
         sphereNode->setWorldPosition(position);
 
         // Set random color for the mesh
         if (sphereNode->mesh) {
-            glm::vec4 randomVertexColor(randomColor(), 1.0f);  // Random RGB + alpha 1.0
-            for (size_t i = 0; i < sphereNode->mesh->colors.size(); i++) {
-                sphereNode->mesh->colors[i] = randomVertexColor;
-            }
+            sphereNode->mesh->materials[0]->baseColor = randomColor();
             // Update the mesh buffers to reflect the color change
             //sphereNode->mesh->updateBuffers();
         }

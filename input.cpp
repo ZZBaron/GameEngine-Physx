@@ -62,20 +62,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     static double lastY = 300.0;
     static bool firstMouse = true;
 
-    // NEEDS UPDATE Only allow object selection when camera is NOT in movement mode 
-    // if (!camstate && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-    //     int width, height;
-    //     glfwGetWindowSize(window, &width, &height);
-    // 
-    //     glm::mat4 projection = glm::perspective(glm::radians(45.0f),
-    //         (float)width / (float)height, 0.1f, 100.0f);
-    //     glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    // 
-    //     Ray ray = SelectionSystem::screenToWorldRay(xpos, ypos, width, height,
-    //         projection, view);
-    //     selectedRB = SelectionSystem::findIntersectedBody(ray, bodies);
-    // }
-
     // Process mouse movement only if camstate is true
     if (g_camera->camstate) {
         if (firstMouse) {
@@ -212,6 +198,10 @@ void processInput(GLFWwindow* window) {
         glfwGetCursorPos(window, &xpos, &ypos);
         mouse_callback(window, xpos, ypos);
     }
+
+
+
+
 }
 
 // After the processInput function, add:

@@ -1,6 +1,6 @@
 #pragma once
 #include "object3D.h"
-#include "lineParameterization.h"
+#include "curveParameterization.h"
 
 
 class TubeNode : public Node {
@@ -170,8 +170,8 @@ private:
     }
 
 public:
-    // Constructor using LineParameterization
-    TubeNode(const LineParameterization& param, float tubeRadius, const TubeParameters& tubeParams = TubeParameters())
+    // Constructor using CurveParameterization
+    TubeNode(const CurveParameterization& param, float tubeRadius, const TubeParameters& tubeParams = TubeParameters())
         : radius(tubeRadius), params(tubeParams) {
         std::vector<glm::vec3> points;
         float step = (param.getEnd() - param.getStart()) / params.lengthSegments;

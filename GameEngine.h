@@ -23,6 +23,7 @@
 #include <sstream>
 #include <fstream> // for file reading
 #include <random> // for random number generation, sphere generation, procedual voxels...
+#include <algorithm>
 
 //#include <fmt/core.h>
 

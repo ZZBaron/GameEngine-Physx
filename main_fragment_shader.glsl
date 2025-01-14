@@ -7,6 +7,12 @@ in vec2 TexCoord;
 in vec4 FragPosLightSpace;
 in vec3 Tangent;
 
+// Texture projection modes
+#define PROJECTION_FLAT 0
+#define PROJECTION_BOX 1
+#define PROJECTION_SPHERE 2
+#define PROJECTION_TUBE 3
+
 struct Material {
     // Base Properties
     vec3 baseColor;
@@ -77,6 +83,15 @@ struct Material {
     bool hasEmissionMap;
     bool hasOcclusionMap;
     bool hasTransmissionMap;
+
+    int baseColorProjection;
+    int normalProjection;
+    int metallicProjection;
+    int roughnessProjection;
+    int emissionProjection;
+    int occlusionProjection;
+    int transmissionProjection;
+
 };
 
 // Light properties
@@ -86,6 +101,8 @@ uniform float luminousPower;
 uniform vec3 viewPos;
 uniform sampler2D shadowMap;
 uniform Material material;
+
+
 
 const float PI = 3.14159265359;
 const float EPSILON = 0.00001;
@@ -146,36 +163,52 @@ float D_Charlie(float roughness, float NoH) {
     return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
 }
 
+vec2 getProjectedUV(vec2 baseUV, int projectionType, vec3 worldPos, vec3 normal) {
+    vec2 projectedUV = baseUV;
+    vec3 nrm;  // Single declaration here
+
+    switch (projectionType) {
+    case PROJECTION_BOX:
+        vec3 absNormal = abs(normal);
+        if (absNormal.x > absNormal.y && absNormal.x > absNormal.z) {
+            projectedUV = worldPos.zy;
+        }
+        else if (absNormal.y > absNormal.z) {
+            projectedUV = worldPos.xz;
+        }
+        else {
+            projectedUV = worldPos.xy;
+        }
+        break;
+
+    case PROJECTION_SPHERE:
+        nrm = normalize(normal);  // Use the single declaration
+        projectedUV = vec2(
+            0.5 + atan(nrm.z, nrm.x) / (2.0 * PI),
+            0.5 - asin(nrm.y) / PI
+        );
+        break;
+
+    case PROJECTION_TUBE:
+        nrm = normalize(normal);  // Use the same nrm variable
+        projectedUV = vec2(
+            0.5 + atan(nrm.z, nrm.x) / (2.0 * PI),
+            worldPos.y
+        );
+        break;
+    }
+
+    return projectedUV;
+}
+
+
 void main() {
     // Sample all textures with their transforms
     vec3 albedo = material.baseColor;
     if (material.hasBaseColorMap) {
-        vec2 baseColorUV = (TexCoord * material.baseColorTiling) + material.baseColorOffset;
+        vec2 baseColorUV = getProjectedUV(TexCoord, material.baseColorProjection, FragPos, Normal);
+        baseColorUV = (baseColorUV * material.baseColorTiling) + material.baseColorOffset;
         albedo *= texture(material.baseColorMap, baseColorUV).rgb;
-    }
-
-    float metallic = material.metallic;
-    if (material.hasMetallicMap) {
-        vec2 metallicUV = (TexCoord * material.metallicTiling) + material.metallicOffset;
-        metallic *= texture(material.metallicMap, metallicUV).r;
-    }
-
-    float roughness = material.roughness;
-    if (material.hasRoughnessMap) {
-        vec2 roughnessUV = (TexCoord * material.roughnessTiling) + material.roughnessOffset;
-        roughness *= texture(material.roughnessMap, roughnessUV).r;
-    }
-
-    float occlusion = 1.0;
-    if (material.hasOcclusionMap) {
-        vec2 occlusionUV = (TexCoord * material.occlusionTiling) + material.occlusionOffset;
-        occlusion = texture(material.occlusionMap, occlusionUV).r;
-    }
-
-    float transmission = material.transmission;
-    if (material.hasTransmissionMap) {
-        vec2 transmissionUV = (TexCoord * material.transmissionTiling) + material.transmissionOffset;
-        transmission *= texture(material.transmissionMap, transmissionUV).r;
     }
 
     // Normal mapping
@@ -184,11 +217,55 @@ void main() {
     vec3 B = normalize(cross(N, T));
     mat3 TBN = mat3(T, B, N);
 
+    // Sample normal map with projection
     if (material.hasNormalMap) {
-        vec2 normalUV = (TexCoord * material.normalTiling) + material.normalOffset;
+        vec2 normalUV = getProjectedUV(TexCoord, material.normalProjection, FragPos, Normal);
+        normalUV = (normalUV * material.normalTiling) + material.normalOffset;
         vec3 tangentNormal = texture(material.normalMap, normalUV).xyz * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
+
+    // Sample metallic with projection
+    float metallic = material.metallic;
+    if (material.hasMetallicMap) {
+        vec2 metallicUV = getProjectedUV(TexCoord, material.metallicProjection, FragPos, Normal);
+        metallicUV = (metallicUV * material.metallicTiling) + material.metallicOffset;
+        metallic *= texture(material.metallicMap, metallicUV).r;
+    }
+
+    // Sample roughness with projection
+    float roughness = material.roughness;
+    if (material.hasRoughnessMap) {
+        vec2 roughnessUV = getProjectedUV(TexCoord, material.roughnessProjection, FragPos, Normal);
+        roughnessUV = (roughnessUV * material.roughnessTiling) + material.roughnessOffset;
+        roughness *= texture(material.roughnessMap, roughnessUV).r;
+    }
+
+    // Sample emission with projection
+    vec3 emission = material.emission;
+    if (material.hasEmissionMap) {
+        vec2 emissionUV = getProjectedUV(TexCoord, material.emissionProjection, FragPos, Normal);
+        emissionUV = (emissionUV * material.emissionTiling) + material.emissionOffset;
+        emission *= texture(material.emissionMap, emissionUV).rgb;
+    }
+
+    // Sample occlusion with projection
+    float occlusion = 1.0;
+    if (material.hasOcclusionMap) {
+        vec2 occlusionUV = getProjectedUV(TexCoord, material.occlusionProjection, FragPos, Normal);
+        occlusionUV = (occlusionUV * material.occlusionTiling) + material.occlusionOffset;
+        occlusion = texture(material.occlusionMap, occlusionUV).r;
+    }
+
+    // Sample transmission with projection
+    float transmission = material.transmission;
+    if (material.hasTransmissionMap) {
+        vec2 transmissionUV = getProjectedUV(TexCoord, material.transmissionProjection, FragPos, Normal);
+        transmissionUV = (transmissionUV * material.transmissionTiling) + material.transmissionOffset;
+        transmission *= texture(material.transmissionMap, transmissionUV).r;
+    }
+
+
 
     // Prepare vectors and dot products
     vec3 V = normalize(viewPos - FragPos);
@@ -307,6 +384,8 @@ void main() {
 
     FragColor = vec4(color, material.alpha);
 
+
+    //FragColor = vec4(fract(TexCoord), 0.0, 1.0); // This will show tiling patterns
     // debug override
     //FragColor = vec4(material.baseColor, 1.0);
 }

@@ -11,6 +11,7 @@ class Material;
 // Material definition (matches FBX material)
 class Material {
 public:
+
     std::string name;
 
     // Base Properties for Principled BSDF
@@ -44,6 +45,36 @@ public:
         glm::vec2 offset;
         glm::vec2 tiling;
         float strength;
+
+        enum class Interpolation {
+            Linear,
+            Closest,
+            Cubic
+        } interpolation = Interpolation::Linear;
+
+        enum class Projection {
+            Flat,
+            Box,
+            Sphere,
+            Tube
+        } projection = Projection::Flat;
+
+        enum class Extension {
+            Repeat,
+            Extend,
+            Clip
+        } extension = Extension::Repeat;
+
+        enum class ColorSpace {
+            sRGB,
+            Linear,
+            NonColor
+        } colorSpace = ColorSpace::sRGB;
+
+        enum class AlphaMode {
+            Straight,
+            Premultiplied
+        } alphaMode = AlphaMode::Straight;
     };
 
     std::map<std::string, TextureMap> textureMaps; // "baseColor", "normal", "metallic", etc.
@@ -77,21 +108,8 @@ public:
         alpha(1.0f) {}
 
     void bind(GLuint shaderProgram) {
-
-        // Get location of uniform
-        GLint baseColorLoc = glGetUniformLocation(shaderProgram, "material.baseColor");
-
-        // Bind the base color
-        glUniform3fv(baseColorLoc, 1, glm::value_ptr(baseColor));
-
-        // Check for GL errors
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            std::cout << "GL Error after binding base color: " << err << std::endl;
-        }
-
-        // Bind material properties (Principled BSDF)
-        //glUniform3fv(glGetUniformLocation(shaderProgram, "material.baseColor"), 1, glm::value_ptr(baseColor));
+        // Bind PBR base properties
+        glUniform3fv(glGetUniformLocation(shaderProgram, "material.baseColor"), 1, glm::value_ptr(baseColor));
         glUniform1f(glGetUniformLocation(shaderProgram, "material.subsurface"), subsurface);
         glUniform3fv(glGetUniformLocation(shaderProgram, "material.subsurfaceRadius"), 1, glm::value_ptr(subsurfaceRadius));
         glUniform3fv(glGetUniformLocation(shaderProgram, "material.subsurfaceColor"), 1, glm::value_ptr(subsurfaceColor));
@@ -114,24 +132,112 @@ public:
         glUniform1f(glGetUniformLocation(shaderProgram, "material.emissionStrength"), emissionStrength);
         glUniform1f(glGetUniformLocation(shaderProgram, "material.alpha"), alpha);
 
-        // Bind textures
-        int textureUnit = 2; 
-        for (const auto& [mapType, textureMap] : textureMaps) {
-            glActiveTexture(GL_TEXTURE0 + textureUnit);
-            glBindTexture(GL_TEXTURE_2D, textureMap.textureId);
-            glUniform1i(glGetUniformLocation(shaderProgram, ("material." + mapType + "Map").c_str()), textureUnit);
-            glUniform2fv(glGetUniformLocation(shaderProgram, ("material." + mapType + "Offset").c_str()), 1, glm::value_ptr(textureMap.offset));
-            glUniform2fv(glGetUniformLocation(shaderProgram, ("material." + mapType + "Tiling").c_str()), 1, glm::value_ptr(textureMap.tiling));
-            glUniform1f(glGetUniformLocation(shaderProgram, ("material." + mapType + "Strength").c_str()), textureMap.strength);
-            textureUnit++;
+        // Define explicit texture units and their properties
+        const struct TextureUnitMapping {
+            std::string name;
+            int unit;
+            std::string uniformName;
+            std::string projectionUniform;
+            std::string offsetUniform;
+            std::string tilingUniform;
+        } textureUnits[] = {
+            {"baseColor", 0, "material.baseColorMap", "material.baseColorProjection", "material.baseColorOffset", "material.baseColorTiling"},
+            {"normal", 1, "material.normalMap", "material.normalProjection", "material.normalOffset", "material.normalTiling"},
+            {"metallic", 2, "material.metallicMap", "material.metallicProjection", "material.metallicOffset", "material.metallicTiling"},
+            {"roughness", 3, "material.roughnessMap", "material.roughnessProjection", "material.roughnessOffset", "material.roughnessTiling"},
+            {"emission", 4, "material.emissionMap", "material.emissionProjection", "material.emissionOffset", "material.emissionTiling"},
+            {"occlusion", 5, "material.occlusionMap", "material.occlusionProjection", "material.occlusionOffset", "material.occlusionTiling"},
+            {"specular", 6, "material.specularMap", "material.specularProjection", "material.specularOffset", "material.specularTiling"},
+            {"transmission", 7, "material.transmissionMap", "material.transmissionProjection", "material.transmissionOffset", "material.transmissionTiling"}
+        };
+
+        // Track bound textures for presence flags
+        std::unordered_map<std::string, bool> boundTextures;
+
+        // Save current OpenGL state
+        GLint lastActiveTexture;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &lastActiveTexture);
+
+        // Bind textures and their properties
+        for (const auto& mapping : textureUnits) {
+            auto it = textureMaps.find(mapping.name);
+            if (it != textureMaps.end()) {
+                // Activate texture unit and bind texture
+                glActiveTexture(GL_TEXTURE0 + mapping.unit);
+                glBindTexture(GL_TEXTURE_2D, it->second.textureId);
+
+                // Set texture uniform
+                glUniform1i(glGetUniformLocation(shaderProgram, mapping.uniformName.c_str()), mapping.unit);
+
+                // Set projection mode
+                glUniform1i(glGetUniformLocation(shaderProgram, mapping.projectionUniform.c_str()),
+                    static_cast<int>(it->second.projection));
+
+                // Set UV transform uniforms
+                glUniform2fv(glGetUniformLocation(shaderProgram, mapping.offsetUniform.c_str()), 1,
+                    glm::value_ptr(it->second.offset));
+                glUniform2fv(glGetUniformLocation(shaderProgram, mapping.tilingUniform.c_str()), 1,
+                    glm::value_ptr(it->second.tiling));
+
+                // Track that we bound this texture
+                boundTextures[mapping.name] = true;
+
+#ifdef _DEBUG
+                // Verify texture binding
+                GLint currentTexture;
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
+                if (currentTexture != it->second.textureId) {
+                    std::cout << "Warning: Texture binding mismatch for " << mapping.name << std::endl;
+                    std::cout << "Expected: " << it->second.textureId << ", Got: " << currentTexture << std::endl;
+                }
+
+                // Check for OpenGL errors
+                GLenum err = glGetError();
+                if (err != GL_NO_ERROR) {
+                    std::cout << "GL Error binding " << mapping.name << " texture: " << err << std::endl;
+                }
+#endif
+            }
+            else {
+                boundTextures[mapping.name] = false;
+            }
         }
 
         // Set texture presence flags
-        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasBaseColorMap"), textureMaps.count("baseColor") > 0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasNormalMap"), textureMaps.count("normal") > 0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasMetallicMap"), textureMaps.count("metallic") > 0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasRoughnessMap"), textureMaps.count("roughness") > 0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasEmissionMap"), textureMaps.count("emission") > 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasBaseColorMap"), boundTextures["baseColor"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasNormalMap"), boundTextures["normal"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasMetallicMap"), boundTextures["metallic"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasRoughnessMap"), boundTextures["roughness"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasEmissionMap"), boundTextures["emission"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasOcclusionMap"), boundTextures["occlusion"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasSpecularMap"), boundTextures["specular"]);
+        glUniform1i(glGetUniformLocation(shaderProgram, "material.hasTransmissionMap"), boundTextures["transmission"]);
+
+        // Restore previous active texture
+        glActiveTexture(lastActiveTexture);
+
+#ifdef _DEBUG
+        // Debug verification of final state
+        for (const auto& mapping : textureUnits) {
+            if (boundTextures[mapping.name]) {
+                glActiveTexture(GL_TEXTURE0 + mapping.unit);
+                GLint currentTexture;
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
+                if (currentTexture != textureMaps[mapping.name].textureId) {
+                    std::cout << "Final state mismatch for " << mapping.name << std::endl;
+                }
+
+                // Verify uniform values
+                GLint location = glGetUniformLocation(shaderProgram, mapping.uniformName.c_str());
+                GLint value;
+                glGetUniformiv(shaderProgram, location, &value);
+                if (value != mapping.unit) {
+                    std::cout << "Uniform value mismatch for " << mapping.name << std::endl;
+                }
+            }
+        }
+#endif
+
     }
 
     void debug() {
@@ -215,79 +321,92 @@ public:
             calculateTangents();
         }
 
-        // Generate buffers if they don't exist
-        if (VAO == 0) {
-            glGenVertexArrays(1, &VAO);
-        }
-        if (VBO == 0) {
-            glGenBuffers(1, &VBO);
-        }
-        if (EBO == 0) {
-            glGenBuffers(1, &EBO);
-        }
+        // Generate buffers
+        if (VAO == 0) glGenVertexArrays(1, &VAO);
+        if (VBO == 0) glGenBuffers(1, &VBO);
+        if (EBO == 0) glGenBuffers(1, &EBO);
 
-        // Bind and set up VAO
         glBindVertexArray(VAO);
 
+        // Calculate stride and offsets
+        size_t stride = sizeof(glm::vec3);  // Position
+        if (!normals.empty()) stride += sizeof(glm::vec3);
+        if (!colors.empty()) stride += sizeof(glm::vec4);
+        if (!uvSets["map1"].empty()) stride += sizeof(glm::vec2);
+        if (!tangents.empty()) stride += sizeof(glm::vec3);
 
-        // Calculate total buffer size
-        size_t totalSize = positions.size() * sizeof(glm::vec3) +
-            normals.size() * sizeof(glm::vec3) +
-            colors.size() * sizeof(glm::vec4) +
-            uvSets["map1"].size() * sizeof(glm::vec2) +
-            tangents.size() * sizeof(glm::vec3);
-
-        //upload vertex data
+        // Allocate buffer
+        size_t totalSize = positions.size() * stride;
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, totalSize, nullptr, GL_STATIC_DRAW);
 
-        // Upload data in portions
+        // Upload interleaved data
         size_t offset = 0;
+        size_t currentOffset = 0;
 
-        // Positions - attribute 0
-        glBufferSubData(GL_ARRAY_BUFFER, offset, positions.size() * sizeof(glm::vec3), positions.data());
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)offset);
+        // Positions
+        for (size_t i = 0; i < positions.size(); i++) {
+            glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec3), &positions[i]);
+            currentOffset += stride;
+        }
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)offset);
         glEnableVertexAttribArray(0);
-        offset += positions.size() * sizeof(glm::vec3);
+        offset += sizeof(glm::vec3);
 
-        // Normals - attribute 1
+        // Normals
         if (!normals.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, offset, normals.size() * sizeof(glm::vec3), normals.data());
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)offset);
+            currentOffset = offset;
+            for (size_t i = 0; i < normals.size(); i++) {
+                glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec3), &normals[i]);
+                currentOffset += stride;
+            }
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)offset);
             glEnableVertexAttribArray(1);
-            offset += normals.size() * sizeof(glm::vec3);
+            offset += sizeof(glm::vec3);
         }
 
-        // Colors - attribute 2
+        // Colors
         if (!colors.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, offset, colors.size() * sizeof(glm::vec4), colors.data());
-            glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, (void*)offset);
+            currentOffset = offset;
+            for (size_t i = 0; i < colors.size(); i++) {
+                glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec4), &colors[i]);
+                currentOffset += stride;
+            }
+            glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, (void*)offset);
             glEnableVertexAttribArray(2);
-            offset += colors.size() * sizeof(glm::vec4);
+            offset += sizeof(glm::vec4);
         }
 
-        // UV coordinates - attribute 3
+        // UVs
         if (!uvSets["map1"].empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, offset, uvSets["map1"].size() * sizeof(glm::vec2), uvSets["map1"].data());
-            glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 0, (void*)offset);
+            currentOffset = offset;
+            for (size_t i = 0; i < uvSets["map1"].size(); i++) {
+                glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec2), &uvSets["map1"][i]);
+                currentOffset += stride;
+            }
+            glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, (void*)offset);
             glEnableVertexAttribArray(3);
+            offset += sizeof(glm::vec2);
         }
 
-        // Upload tangents (attribute 4)
+        // Tangents
         if (!tangents.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, offset, tangents.size() * sizeof(glm::vec3), tangents.data());
-            glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 0, (void*)offset);
+            currentOffset = offset;
+            for (size_t i = 0; i < tangents.size(); i++) {
+                glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec3), &tangents[i]);
+                currentOffset += stride;
+            }
+            glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, stride, (void*)offset);
             glEnableVertexAttribArray(4);
         }
 
-
-        // Set up index buffer if we have indices
+        // Set up index buffer
         if (!indices.empty()) {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+                indices.data(), GL_STATIC_DRAW);
         }
 
-        // Unbind VAO last
         glBindVertexArray(0);
     }
 
@@ -301,13 +420,13 @@ public:
             unsigned int i1 = indices[i + 1];
             unsigned int i2 = indices[i + 2];
 
-            glm::vec3 v0 = positions[i0];
-            glm::vec3 v1 = positions[i1];
-            glm::vec3 v2 = positions[i2];
+            const glm::vec3& v0 = positions[i0];
+            const glm::vec3& v1 = positions[i1];
+            const glm::vec3& v2 = positions[i2];
 
-            glm::vec2 uv0 = uvSets["map1"][i0];
-            glm::vec2 uv1 = uvSets["map1"][i1];
-            glm::vec2 uv2 = uvSets["map1"][i2];
+            const glm::vec2& uv0 = uvSets["map1"][i0];
+            const glm::vec2& uv1 = uvSets["map1"][i1];
+            const glm::vec2& uv2 = uvSets["map1"][i2];
 
             glm::vec3 edge1 = v1 - v0;
             glm::vec3 edge2 = v2 - v0;
@@ -315,13 +434,19 @@ public:
             glm::vec2 deltaUV2 = uv2 - uv0;
 
             float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+            f = std::isfinite(f) ? f : 0.0f;  // Handle degenerate UV case
 
             glm::vec3 tangent;
             tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
             tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
             tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
 
-            // Add to all vertices of the triangle
+            // Keep tangent consistent with vertex winding order
+            if (glm::dot(glm::cross(edge1, edge2), tangent) < 0.0f) {
+                tangent = -tangent;
+            }
+
+            // Accumulate tangents (will normalize after)
             tangents[i0] += tangent;
             tangents[i1] += tangent;
             tangents[i2] += tangent;
@@ -329,7 +454,7 @@ public:
 
         // Normalize all tangents
         for (auto& tangent : tangents) {
-            tangent = glm::normalize(tangent);
+            tangent = glm::length(tangent) > 0.0f ? glm::normalize(tangent) : glm::vec3(1.0f, 0.0f, 0.0f);
         }
     }
 
@@ -483,8 +608,9 @@ public:
     }
 
     void drawWireframe() {
+        glLineWidth(1.0f);  // Set line width
         glColor3f(0.0f, 1.0f, 0.0f);  // Green wireframe
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        // need glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         glBegin(GL_TRIANGLES);
         for (size_t i = 0; i < indices.size(); i++) {
@@ -493,7 +619,75 @@ public:
         }
         glEnd();
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+
+    void flipNormals() {
+        // Flip all stored normals
+        for (auto& normal : normals) {
+            normal = -normal;
+        }
+
+        // Flip winding order of triangles while preserving UV mapping
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            // Cache UV indices before swapping
+            unsigned int i1 = indices[i + 1];
+            unsigned int i2 = indices[i + 2];
+
+            // Swap indices
+            indices[i + 1] = i2;
+            indices[i + 2] = i1;
+        }
+
+        // Flip tangents if they exist
+        for (auto& tangent : tangents) {
+            tangent = -tangent;
+        }
+
+        // If buffers are already set up, update them
+        if (VAO != 0) {
+            glBindVertexArray(VAO);
+
+            // Update normal data
+            size_t stride = sizeof(glm::vec3);  // Position
+            if (!normals.empty()) stride += sizeof(glm::vec3);
+            if (!colors.empty()) stride += sizeof(glm::vec4);
+            if (!uvSets["map1"].empty()) stride += sizeof(glm::vec2);
+            if (!tangents.empty()) stride += sizeof(glm::vec3);
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+            // Update normals
+            size_t normalOffset = sizeof(glm::vec3); // After positions
+            size_t currentOffset = normalOffset;
+            for (size_t i = 0; i < normals.size(); i++) {
+                glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec3), &normals[i]);
+                currentOffset += stride;
+            }
+
+            // Update tangents if they exist
+            if (!tangents.empty()) {
+                size_t tangentOffset = normalOffset +
+                    ((!colors.empty()) ? sizeof(glm::vec4) : 0) +
+                    ((!uvSets["map1"].empty()) ? sizeof(glm::vec2) : 0);
+                currentOffset = tangentOffset;
+                for (size_t i = 0; i < tangents.size(); i++) {
+                    glBufferSubData(GL_ARRAY_BUFFER, currentOffset, sizeof(glm::vec3), &tangents[i]);
+                    currentOffset += stride;
+                }
+            }
+
+            // Update index buffer
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+                indices.data(), GL_STATIC_DRAW);
+
+            glBindVertexArray(0);
+        }
+
+        // Recalculate tangents since normals changed
+        if (!uvSets["map1"].empty()) {
+            calculateTangents();
+        }
     }
 
     void debug() {
@@ -515,7 +709,11 @@ enum class NodeType {
 class Node {
 public:
     std::string name;
+
+    //Node could have parent
     Node* parent;
+
+    // Node could have children
     std::vector<std::shared_ptr<Node>> children;
 
     //node geometry type, default means could or could not have geometry, but the mesh is not of a special type
@@ -531,11 +729,15 @@ public:
     bool visible;
     bool castsShadows;
     bool receivesShadows;
+
+
+
     std::map<std::string, std::string> properties; // Custom properties
 
     // Optional components (like FBX node attributes)
-    std::shared_ptr<Mesh> mesh;
-    std::shared_ptr<Material> material = std::make_shared<Material>();
+    std::shared_ptr<Mesh> mesh; // mesh has materials
+    // std::shared_ptr<Light> light;
+
 
     Node() :
         parent(nullptr),
@@ -614,4 +816,98 @@ public:
 
 
 };
+
+
+// Debug function to check texture parameters
+inline void debugTextureParameters(GLuint textureId) {
+    GLint currentTextureBinding;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTextureBinding);
+
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    GLint wrapS, wrapT, minFilter, magFilter;
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, &wrapS);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, &wrapT);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &minFilter);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &magFilter);
+
+    std::cout << "\n=== Texture Parameters for ID " << textureId << " ===\n";
+    std::cout << "Wrap S: " << wrapS << " (GL_REPEAT=" << GL_REPEAT << ")\n";
+    std::cout << "Wrap T: " << wrapT << " (GL_REPEAT=" << GL_REPEAT << ")\n";
+    std::cout << "Min Filter: " << minFilter << " (GL_LINEAR=" << GL_LINEAR << ")\n";
+    std::cout << "Mag Filter: " << magFilter << " (GL_LINEAR=" << GL_LINEAR << ")\n";
+
+    glBindTexture(GL_TEXTURE_2D, currentTextureBinding);
+}
+
+// Debug function to check UV coordinates
+inline void debugUVCoordinates(const std::vector<glm::vec2>& uvs, const std::string& uvSetName) {
+    if (uvs.empty()) {
+        std::cout << "UV set '" << uvSetName << "' is empty!\n";
+        return;
+    }
+
+    glm::vec2 minUV(std::numeric_limits<float>::max());
+    glm::vec2 maxUV(std::numeric_limits<float>::lowest());
+
+    for (const auto& uv : uvs) {
+        minUV.x = std::min(minUV.x, uv.x);
+        minUV.y = std::min(minUV.y, uv.y);
+        maxUV.x = std::max(maxUV.x, uv.x);
+        maxUV.y = std::max(maxUV.y, uv.y);
+    }
+
+    std::cout << "\n=== UV Coordinates for " << uvSetName << " ===\n";
+    std::cout << "Number of UV coordinates: " << uvs.size() << "\n";
+    std::cout << "UV range: [" << minUV.x << ", " << minUV.y << "] to ["
+        << maxUV.x << ", " << maxUV.y << "]\n";
+
+    // Print first few UVs
+    std::cout << "First 5 UVs:\n";
+    for (size_t i = 0; i < std::min(size_t(5), uvs.size()); ++i) {
+        std::cout << "UV[" << i << "]: (" << uvs[i].x << ", " << uvs[i].y << ")\n";
+    }
+}
+
+// Debug function to check texture binding in shader
+inline void debugTextureBindings(GLuint shaderProgram) {
+    GLint numActiveUniforms;
+    glGetProgramiv(shaderProgram, GL_ACTIVE_UNIFORMS, &numActiveUniforms);
+
+    std::cout << "\n=== Active Texture Uniforms ===\n";
+
+    const GLsizei bufSize = 256;
+    GLchar name[bufSize];
+    GLsizei length;
+    GLint size;
+    GLenum type;
+
+    for (GLint i = 0; i < numActiveUniforms; i++) {
+        glGetActiveUniform(shaderProgram, i, bufSize, &length, &size, &type, name);
+
+        // Check if this uniform is a sampler
+        if (type == GL_SAMPLER_2D) {
+            GLint location = glGetUniformLocation(shaderProgram, name);
+            GLint textureUnit;
+            glGetUniformiv(shaderProgram, location, &textureUnit);
+
+            std::cout << "Texture uniform '" << name << "' at location " << location
+                << " bound to texture unit " << textureUnit << "\n";
+        }
+    }
+}
+
+// In ModelImporter::processMaterial():
+inline void debugMaterialTextures(const std::shared_ptr<Material>& material) {
+    std::cout << "\n=== Material Texture Debug ===\n";
+    for (const auto& [mapType, texMap] : material->textureMaps) {
+        std::cout << "Texture type: " << mapType << "\n";
+        std::cout << "Texture ID: " << texMap.textureId << "\n";
+        std::cout << "UV Set: " << texMap.uvSet << "\n";
+        std::cout << "Offset: (" << texMap.offset.x << ", " << texMap.offset.y << ")\n";
+        std::cout << "Tiling: (" << texMap.tiling.x << ", " << texMap.tiling.y << ")\n";
+        debugTextureParameters(texMap.textureId);
+    }
+}
+
 

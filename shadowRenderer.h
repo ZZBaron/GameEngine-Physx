@@ -63,6 +63,11 @@ public:
     void renderShadowPass(const std::vector<std::shared_ptr<Node>>& sceneNodes) {
         if (!shadowsEnabled) return;
 
+        // Debug - check framebuffer status
+        GLint currentFBO;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
+        std::cout << "Before shadow pass - Current FBO: " << currentFBO << std::endl;
+
         // Calculate light space matrix
         glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, nearPlane, farPlane);
         glm::mat4 lightView = createViewMatrix(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -70,9 +75,37 @@ public:
 
         // Bind shadow framebuffer and shader
         shadowMap.bindForWriting();
+
+
+        // Debug - check if we switched to shadow FBO
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
+        std::cout << "During shadow pass - Current FBO: " << currentFBO << std::endl;
+        std::cout << "Expected shadow FBO: " << shadowMap.depthMapFBO << std::endl;
+
+        // Check framebuffer status
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            std::cout << "Framebuffer is not complete! Status: " << status << std::endl;
+        }
+
+
         glUseProgram(depthShaderProgram);
         glUniformMatrix4fv(glGetUniformLocation(depthShaderProgram, "lightSpaceMatrix"),
             1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+
+        // Debug - check if any objects will be rendered
+        int objectCount = 0;
+        for (const auto& node : sceneNodes) {
+            if (node->mesh) objectCount++;
+        }
+        std::cout << "Objects to render in shadow pass: " << objectCount << std::endl;
+
+
+        // Debug - verify shader program
+        GLint currentProgram;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+        std::cout << "Depth shader program: " << depthShaderProgram << std::endl;
+        std::cout << "Current program: " << currentProgram << std::endl;
 
         // Render sceneNodes to shadow map
         for (const auto& node : sceneNodes) {
@@ -87,11 +120,24 @@ public:
             }
         }
 
+        // Debug - check final state
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
+        std::cout << "After shadow pass - Current FBO: " << currentFBO << std::endl;
+        std::cout << "------------------------" << std::endl;
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     }
 
     void prepareMainPass(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos) {
+        // Debug - check current texture bindings
+        GLint lastActiveTexture;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &lastActiveTexture);
+        std::cout << "Before main pass - Active texture unit: " << (lastActiveTexture - GL_TEXTURE0) << std::endl;
 
+        GLint lastTexture;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
+        std::cout << "Before main pass - Bound texture: " << lastTexture << std::endl;
 
         glUseProgram(mainShaderProgram);
 
@@ -117,15 +163,40 @@ public:
             shadowMap.bindForReading(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT);
             glUniform1i(glGetUniformLocation(mainShaderProgram, "shadowMap"), SHADOW_MAP_TEXTURE_UNIT);
         }
+
+        // Debug - verify texture binding
+        glActiveTexture(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT);
+        GLint currentTexture;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
+        std::cout << "After binding shadow map - Current texture: " << currentTexture << std::endl;
+        std::cout << "Expected shadow map texture: " << shadowMap.depthMap << std::endl;
+
+        // Get and check shadow map uniform location
+        GLint shadowMapLoc = glGetUniformLocation(mainShaderProgram, "shadowMap");
+        std::cout << "Shadow map uniform location: " << shadowMapLoc << std::endl;
+
+        // Set shadowMap uniform to use correct texture unit
+        glUniform1i(shadowMapLoc, SHADOW_MAP_TEXTURE_UNIT);
+
+        // Debug - verify shader program
+        GLint currentProgram;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+        std::cout << "Main shader program ID: " << mainShaderProgram << std::endl;
+        std::cout << "Current program ID: " << currentProgram << std::endl;
     }
 
     void renderMainPass(const std::vector<std::shared_ptr<Node>>& sceneNodes, const glm::mat4& view, const glm::mat4& projection) {
+        glUseProgram(mainShaderProgram);
+
+        GLint boundTex;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
+        std::cout << "Texture bound at start of renderMainPass: " << boundTex << std::endl;
+        std::cout << "Expected shadow map: " << shadowMap.depthMap << std::endl;
 
         // Draw nodes in scene
         for (const auto& node : sceneNodes) {
             if (node->mesh && node->visible) {
 
-                glUseProgram(mainShaderProgram);
                 glUniformMatrix4fv(
                     glGetUniformLocation(mainShaderProgram, "model"),
                     1, GL_FALSE,

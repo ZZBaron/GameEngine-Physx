@@ -5,7 +5,7 @@
 #include <vector>
 
 // Class to represent a parametric curve in 3D space
-class LineParameterization {
+class CurveParameterization {
 public:
     // Function type for the parametric curve: R -> R^3
     using ParametricFunction = std::function<glm::vec3(float)>;
@@ -16,7 +16,7 @@ private:
     float endParam;
 
 public:
-    LineParameterization(ParametricFunction f, float start = 0.0f, float end = 1.0f)
+    CurveParameterization(ParametricFunction f, float start = 0.0f, float end = 1.0f)
         : func(f), startParam(start), endParam(end) {}
 
     // Evaluate the curve at parameter t
