@@ -49,7 +49,8 @@ public:
     bool drawControlsoverlay = true;
 
 	glm::vec3 ambientLight;
-	std::vector<std::shared_ptr<Node>> lights;
+    std::vector<std::shared_ptr<SpotLight>> spotLights;
+    std::vector<std::shared_ptr<SunLight >> sunLights;
 
     // for first person player mode
     Player player;
@@ -64,6 +65,20 @@ public:
 		auto defaultCamera = std::make_shared<Camera>("Default");
 		cameras.push_back(defaultCamera);
 		activeCamera = defaultCamera;
+
+        auto defaultLight = std::make_shared<SpotLight>();
+        defaultLight->name = "defaultLight";
+        defaultLight->setWorldPosition(glm::vec3(0.0f, 3.0f, 0.0f));
+        defaultLight->intensity = 5.0f;
+        defaultLight->direction = glm::normalize(glm::vec3(0.0f, -1.0f, 2.0f));
+        addSpotLight(defaultLight);
+
+        auto light2 = std::make_shared<SpotLight>();
+        light2->name = "light2";
+        light2->setWorldPosition(glm::vec3(0.0f, 3.0f, 0.0f));
+        light2->intensity = 10.0f;
+        light2->direction = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
+        addSpotLight(light2);
 	}
 
 
@@ -119,31 +134,17 @@ public:
         cameras.push_back(camera);
     }
 
-    void addLight(std::shared_ptr<Node> light) {
 
-        std::cout << "\n=== Scene::addLight() ===\n";
-        std::cout << "Light node position before adding: " <<
-            light->getWorldPosition().x << ", " <<
-            light->getWorldPosition().y << ", " <<
-            light->getWorldPosition().z << "\n";
+    void addSpotLight(std::shared_ptr<SpotLight> spotLight) {
+        spotLights.push_back(spotLight);
+        shadowRenderer.addSpotLight(spotLight);
+        addNode(spotLight); // for light visualizer (sphere)
 
-        std::cout << "Light node transform before adding:\n";
-        for (int i = 0; i < 4; i++) {
-            std::cout << "[ ";
-            for (int j = 0; j < 4; j++) {
-                std::cout << light->worldTransform[i][j] << " ";
-            }
-            std::cout << "]\n";
-        }
+    }
 
-
-        lights.push_back(light);
-        addNode(light);
-
-        std::cout << "Light node position after adding: " <<
-            light->getWorldPosition().x << ", " <<
-            light->getWorldPosition().y << ", " <<
-            light->getWorldPosition().z << "\n";
+    void addSunLight(std::shared_ptr<SunLight> sunLight) {
+        sunLights.push_back(sunLight);
+        addNode(sunLight); // for light visualizer (sphere)
 
     }
 
@@ -193,6 +194,7 @@ public:
         }
 
         // 1. First render shadow map
+
         shadowRenderer.renderShadowPass(opaqueNodes);  // Only render opaque objects to shadow map
 
         // 2. Reset viewport and render opaque objects with shadows
@@ -202,16 +204,6 @@ public:
         glDisable(GL_BLEND);
 
         if (drawObjects) {
-            
-
-            //if (drawWireframes) {
-            //    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            //}
-            //
-            //if (drawObjects) {
-            //    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            //}
-
 
             shadowRenderer.prepareMainPass(view, projection, activeCamera->cameraPos);
 
@@ -248,7 +240,7 @@ public:
         }
 
         if (drawControlsoverlay) {
-            drawControlsOverlay();
+            //drawControlsOverlay();
         }
 
 

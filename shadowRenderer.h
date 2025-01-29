@@ -5,50 +5,53 @@
 #include "object3D.h"
 #include "shader.h"
 #include "misc_funcs.h"
+#include "light.h"
+#include "paths.h"
 
 
 class ShadowRenderer {
 private:
-    ShadowMap shadowMap;
-    static const GLuint SHADOW_MAP_TEXTURE_UNIT = 1;
+    static const int MAX_SPOT_LIGHTS = 4;
+    std::vector<ShadowMap> shadowMaps;
+    std::vector<glm::mat4> lightSpaceMatrices;
+    std::vector<std::shared_ptr<SpotLight>> activeLights;
+
+    static const GLuint SHADOW_MAP_TEXTURE_UNIT = 8;  // Start after material textures
 
     GLuint depthShaderProgram;
     GLuint mainShaderProgram;
-    glm::mat4 lightSpaceMatrix;
 
-    float nearPlane = 1.0f;
+    float nearPlane = 0.1f;
     float farPlane = 50.0f;
-
-    glm::vec3 lightPos;
-    glm::vec3 lightColor;
-    float luminousPower;
 
 public:
     bool shadowsEnabled = true;
 
-    ShadowRenderer() :
-        lightPos(0.0f, 15.0f, 0.0f),
-        lightColor(1.0f, 1.0f, 1.0f),
-        luminousPower(1.0f) {}
+    ShadowRenderer() {
+        
 
-    void initialize(const char* depthVertexPath, const char* depthFragmentPath,
-        const char* mainShaderVertexPath, const char* mainShaderFragmentPath) {
+    }
+
+    void initialize() {
         // Initialize depth shader for shadow mapping
-        Shader depthShader(depthVertexPath, depthFragmentPath);
+        Shader depthShader(Paths::Shaders::depthVertexShader.c_str(), Paths::Shaders::depthFragmentShader.c_str());
         depthShaderProgram = depthShader.getShaderProgram();
 
         // Initialize shader for rendering with shadows
-        Shader mainShader(mainShaderVertexPath, mainShaderFragmentPath);
+        Shader mainShader(Paths::Shaders::vertexShader.c_str(), Paths::Shaders::fragmentShader.c_str());
         mainShaderProgram = mainShader.getShaderProgram();
 
-        // Initialize shadow map
-        shadowMap.initialize();
+
+        // Initialize shadow maps for maximum number of lights
+        shadowMaps.resize(MAX_SPOT_LIGHTS);
+        for (size_t i = 0; i < shadowMaps.size(); i++) {
+            shadowMaps[i].initialize();
+        }
     }
 
-    void setLightProperties(const glm::vec3& pos, const glm::vec3& color, float power) {
-        lightPos = pos;
-        lightColor = color;
-        luminousPower = power;
+    void addSpotLight(std::shared_ptr<SpotLight> spotlight) {
+        activeLights.push_back(spotlight);
+        lightSpaceMatrices.push_back(glm::mat4(0.0f));
     }
 
     void setShadowProperties(float near, float far) {
@@ -62,127 +65,133 @@ public:
 
     void renderShadowPass(const std::vector<std::shared_ptr<Node>>& sceneNodes) {
         if (!shadowsEnabled) return;
+        std::cout << "\n --- Calling renderShadowPass --- \n";
 
-        // Debug - check framebuffer status
-        GLint currentFBO;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
-        std::cout << "Before shadow pass - Current FBO: " << currentFBO << std::endl;
+        // Update for each active light
+        for (size_t i = 0; i < activeLights.size() && i < MAX_SPOT_LIGHTS; ++i) {
+            auto& light = activeLights[i];
+            std::cout << i << std::endl;
 
-        // Calculate light space matrix
-        glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, nearPlane, farPlane);
-        glm::mat4 lightView = createViewMatrix(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        lightSpaceMatrix = lightProjection * lightView;
+            // Calculate light space matrix for this light
+            glm::mat4 lightProjection = glm::perspective(
+                glm::radians(90.0f), 1.0f, nearPlane, farPlane
+            );
+            glm::mat4 lightView = createViewMatrix(
+                light->getWorldPosition(),
+                light->getWorldPosition() + light->direction,
+                glm::vec3(0.0f, 1.0f, 0.0f)
+            );
 
-        // Bind shadow framebuffer and shader
-        shadowMap.bindForWriting();
-
-
-        // Debug - check if we switched to shadow FBO
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
-        std::cout << "During shadow pass - Current FBO: " << currentFBO << std::endl;
-        std::cout << "Expected shadow FBO: " << shadowMap.depthMapFBO << std::endl;
-
-        // Check framebuffer status
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            std::cout << "Framebuffer is not complete! Status: " << status << std::endl;
-        }
+            lightSpaceMatrices[i] = lightProjection * lightView;
 
 
-        glUseProgram(depthShaderProgram);
-        glUniformMatrix4fv(glGetUniformLocation(depthShaderProgram, "lightSpaceMatrix"),
-            1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+            // Render shadow map for this light
+            shadowMaps[i].bindForWriting();
+            glClear(GL_DEPTH_BUFFER_BIT);
 
-        // Debug - check if any objects will be rendered
-        int objectCount = 0;
-        for (const auto& node : sceneNodes) {
-            if (node->mesh) objectCount++;
-        }
-        std::cout << "Objects to render in shadow pass: " << objectCount << std::endl;
+            glUseProgram(depthShaderProgram);
+            glUniformMatrix4fv(
+                glGetUniformLocation(depthShaderProgram, "lightSpaceMatrix"),
+                1, GL_FALSE, glm::value_ptr(lightSpaceMatrices[i])
+            );
 
-
-        // Debug - verify shader program
-        GLint currentProgram;
-        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
-        std::cout << "Depth shader program: " << depthShaderProgram << std::endl;
-        std::cout << "Current program: " << currentProgram << std::endl;
-
-        // Render sceneNodes to shadow map
-        for (const auto& node : sceneNodes) {
-            if (node->mesh) {
-                glUniformMatrix4fv(
-                    glGetUniformLocation(depthShaderProgram, "model"),
-                    1, GL_FALSE,
-                    glm::value_ptr(node->worldTransform)
-                );
-
-                node->mesh->drawShadow(depthShaderProgram);
+            for (const auto& node : sceneNodes) {
+                if (node->mesh && node->castsShadows) {
+                    glUniformMatrix4fv(
+                        glGetUniformLocation(depthShaderProgram, "model"),
+                        1, GL_FALSE, glm::value_ptr(node->worldTransform)
+                    );
+                    node->mesh->drawShadow(depthShaderProgram);
+                }
             }
         }
 
-        // Debug - check final state
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
-        std::cout << "After shadow pass - Current FBO: " << currentFBO << std::endl;
-        std::cout << "------------------------" << std::endl;
-
+        
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     }
 
     void prepareMainPass(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos) {
-        // Debug - check current texture bindings
-        GLint lastActiveTexture;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &lastActiveTexture);
-        std::cout << "Before main pass - Active texture unit: " << (lastActiveTexture - GL_TEXTURE0) << std::endl;
-
-        GLint lastTexture;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
-        std::cout << "Before main pass - Bound texture: " << lastTexture << std::endl;
 
         glUseProgram(mainShaderProgram);
+
+        //debug texture units
+        GLint boundTextures[16];
+        for (int i = 0; i < 16; i++) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTextures[i]);
+            std::cout << "Texture unit " << i << " bound to: " << boundTextures[i] << std::endl;
+        }
 
         // Set common uniforms
         glUniformMatrix4fv(glGetUniformLocation(mainShaderProgram, "projection"),
             1, GL_FALSE, glm::value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(mainShaderProgram, "view"),
             1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(mainShaderProgram, "lightSpaceMatrix"),
-            1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
 
         glUniform3fv(glGetUniformLocation(mainShaderProgram, "viewPos"),
             1, glm::value_ptr(cameraPos));
-        glUniform3fv(glGetUniformLocation(mainShaderProgram, "lightPos"),
-            1, glm::value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(mainShaderProgram, "lightColor"),
-            1, glm::value_ptr(lightColor));
-        glUniform1f(glGetUniformLocation(mainShaderProgram, "luminousPower"),
-            luminousPower);
 
-        if (shadowsEnabled) {
-            // Explicitly use texture unit 1 for shadow map
-            shadowMap.bindForReading(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT);
-            glUniform1i(glGetUniformLocation(mainShaderProgram, "shadowMap"), SHADOW_MAP_TEXTURE_UNIT);
+        // Set number of active lights
+        glUniform1i(glGetUniformLocation(mainShaderProgram, "numActiveSpotLights"),
+            std::min((int)activeLights.size(), MAX_SPOT_LIGHTS));
+
+        // Set light properties for all active lights
+        for (size_t i = 0; i < activeLights.size() && i < MAX_SPOT_LIGHTS; ++i) {
+            std::string base = "spotLights[" + std::to_string(i) + "].";
+            std::string baseForMatrices = "spotLightSpaceMatrix[" + std::to_string(i) + "]";
+            auto& light = activeLights[i];
+
+            glUniformMatrix4fv(glGetUniformLocation(mainShaderProgram, baseForMatrices.c_str()),
+                1, GL_FALSE, glm::value_ptr(lightSpaceMatrices[i]));
+            
+
+            glUniform3fv(glGetUniformLocation(mainShaderProgram, (base + "position").c_str()),
+                1, glm::value_ptr(light->getWorldPosition()));
+            glUniform3fv(glGetUniformLocation(mainShaderProgram, (base + "direction").c_str()),
+                1, glm::value_ptr(light->direction));
+            glUniform3fv(glGetUniformLocation(mainShaderProgram, (base + "color").c_str()),
+                1, glm::value_ptr(light->color));
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "intensity").c_str()),
+                light->intensity);
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "constant").c_str()),
+                light->constant);
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "linear").c_str()),
+                light->linear);
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "quadratic").c_str()),
+                light->quadratic);
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "innerCutoff").c_str()),
+                light->innerCutoff);
+            glUniform1f(glGetUniformLocation(mainShaderProgram, (base + "outerCutoff").c_str()),
+                light->outerCutoff);
+
+            // Bind shadow map for this light
+            if (shadowsEnabled) {
+                shadowMaps[i].bindForReading(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT + i);
+                glUniform1i(glGetUniformLocation(mainShaderProgram,
+                    ("shadowMaps[" + std::to_string(i) + "]").c_str()),
+                    SHADOW_MAP_TEXTURE_UNIT + i);
+            }
+
+            //  after binding shadow maps
+            for (size_t i = 0; i < activeLights.size() && i < MAX_SPOT_LIGHTS; ++i) {
+                GLint shadowTexture;
+                glActiveTexture(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT + i);
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &shadowTexture);
+                std::cout << "Shadow map " << i << " bound to texture unit " << (SHADOW_MAP_TEXTURE_UNIT + i)
+                    << " with texture ID: " << shadowTexture << std::endl;
+
+                // Verify uniform location and value
+                GLint location = glGetUniformLocation(mainShaderProgram,
+                    ("shadowMaps[" + std::to_string(i) + "]").c_str());
+                GLint value;
+                glGetUniformiv(mainShaderProgram, location, &value);
+                std::cout << "shadowMaps[" << i << "] uniform location: " << location
+                    << " value: " << value << std::endl;
+            }
         }
 
-        // Debug - verify texture binding
-        glActiveTexture(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT);
-        GLint currentTexture;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
-        std::cout << "After binding shadow map - Current texture: " << currentTexture << std::endl;
-        std::cout << "Expected shadow map texture: " << shadowMap.depthMap << std::endl;
 
-        // Get and check shadow map uniform location
-        GLint shadowMapLoc = glGetUniformLocation(mainShaderProgram, "shadowMap");
-        std::cout << "Shadow map uniform location: " << shadowMapLoc << std::endl;
-
-        // Set shadowMap uniform to use correct texture unit
-        glUniform1i(shadowMapLoc, SHADOW_MAP_TEXTURE_UNIT);
-
-        // Debug - verify shader program
-        GLint currentProgram;
-        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
-        std::cout << "Main shader program ID: " << mainShaderProgram << std::endl;
-        std::cout << "Current program ID: " << currentProgram << std::endl;
     }
 
     void renderMainPass(const std::vector<std::shared_ptr<Node>>& sceneNodes, const glm::mat4& view, const glm::mat4& projection) {
@@ -191,7 +200,6 @@ public:
         GLint boundTex;
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
         std::cout << "Texture bound at start of renderMainPass: " << boundTex << std::endl;
-        std::cout << "Expected shadow map: " << shadowMap.depthMap << std::endl;
 
         // Draw nodes in scene
         for (const auto& node : sceneNodes) {
@@ -220,8 +228,9 @@ public:
     // Getter methods
     GLuint getDepthShaderProgram() const { return depthShaderProgram; }
     GLuint getMainShaderProgram() const { return mainShaderProgram; }
-    GLuint getShadowMap() const { return shadowMap.depthMap; }
-    const glm::mat4& getLightSpaceMatrix() const { return lightSpaceMatrix; }
-    const glm::vec3& getLightPosition() const { return lightPos; }
+    ShadowMap getShadowMap(int index) { return shadowMaps[index]; }
+    glm::mat4 getLightSpaceMatrix(int index) { return lightSpaceMatrices[index]; }
+    float getNearPlane() { return nearPlane; }
+    float getFarPlane() { return farPlane; }
     bool areShadowsEnabled() const { return shadowsEnabled; }
 };

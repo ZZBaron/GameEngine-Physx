@@ -58,6 +58,52 @@ inline std::string vec2_to_string(glm::vec2 v, int decimal_places = 2) { // assu
 
 }
 
+inline std::string mat4_to_string(const glm::mat4& m, int decimal_places = 2) {
+	std::stringstream ss;
+	ss << std::fixed << std::setprecision(decimal_places);
+
+	// First, find the maximum width needed for any number
+	std::vector<int> column_widths(4, 0);
+	for (int col = 0; col < 4; col++) {
+		for (int row = 0; row < 4; row++) {
+			std::stringstream temp;
+			temp << std::fixed << std::setprecision(decimal_places) << m[col][row];
+			column_widths[col] = std::max(column_widths[col], static_cast<int>(temp.str().length()));
+		}
+	}
+
+	// Build the matrix string with proper alignment
+	std::string result = "[" + std::string(column_widths[0] + column_widths[1] + column_widths[2] + column_widths[3] + 9, ' ') + "\n";
+
+	for (int row = 0; row < 4; row++) {
+		result += "  [ ";
+		for (int col = 0; col < 4; col++) {
+			ss.str("");
+			ss << m[col][row];
+			std::string value = ss.str();
+
+			// Right-align the number within its column
+			result += std::string(column_widths[col] - value.length(), ' ') + value;
+
+			// Add spacing between columns
+			if (col < 3) result += " ";
+		}
+
+		// no comma on last row
+		if (row < 3) {
+			result += " ],\n";
+		}
+		else {
+			result += " ]\n";
+		}
+
+	}
+
+	result += "]" + std::string(column_widths[0] + column_widths[1] + column_widths[2] + column_widths[3] + 9, ' ');
+
+	return result;
+}
+
 class debugLog {
 public:
 	std::vector<std::string> log;

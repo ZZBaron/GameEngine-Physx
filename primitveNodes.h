@@ -14,6 +14,16 @@ public:
         generateMesh();
     }
 
+    //default constructer
+    SphereNode() {
+        radius = 0.1f;
+        slices = 20;
+        stacks = 20;
+        type = NodeType::Sphere;
+        generateMesh();
+    }
+
+
 private:
     void generateMesh() {
         mesh = std::make_shared<Mesh>();

@@ -165,6 +165,7 @@ public:
                 // Activate texture unit and bind texture
                 glActiveTexture(GL_TEXTURE0 + mapping.unit);
                 glBindTexture(GL_TEXTURE_2D, it->second.textureId);
+                std::cout << "binding texture unit " << mapping.unit << " to id " << it->second.textureId << std::endl;
 
                 // Set texture uniform
                 glUniform1i(glGetUniformLocation(shaderProgram, mapping.uniformName.c_str()), mapping.unit);
@@ -507,7 +508,7 @@ public:
             glEnableVertexAttribArray(3);
             GLint enabled;
             glGetVertexAttribiv(3, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &enabled);
-            //std::cout << "UV attribute enabled: " << enabled << std::endl;
+            std::cout << "UV attribute enabled: " << enabled << std::endl;
         }
 
         // Bind materials if available
@@ -574,6 +575,9 @@ public:
     void drawShadow(GLuint depthShaderProgram) {
         glBindVertexArray(VAO);
 
+        // Enable position attribute (location 0) since that's all we need
+        glEnableVertexAttribArray(0);
+
         // For shadow mapping, we only need positions
         // No need to bind materials or textures since we're only writing depth
         if (!materialIds.empty() && !materials.empty()) {
@@ -604,6 +608,7 @@ public:
             glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
         }
 
+        glDisableVertexAttribArray(0); 
         glBindVertexArray(0);
     }
 
@@ -701,7 +706,10 @@ enum class NodeType {
     Default,
     Sphere,
     Box,
-    Cylinder
+    Cylinder,
+    SpotLight,
+    PointLight,
+    SunLight
     // Add other types as needed
 };
 
@@ -719,13 +727,13 @@ public:
     //node geometry type, default means could or could not have geometry, but the mesh is not of a special type
     NodeType type = NodeType::Default;
 
-    // Transform data (matches FBX transform inheritance)
+    // Transform data 
     glm::vec3 localTranslation;
     glm::quat localRotation;
     glm::vec3 localScale;
     glm::mat4 worldTransform;
 
-    // Visibility and properties (matches FBX node attributes)
+    // Visibility and properties 
     bool visible;
     bool castsShadows;
     bool receivesShadows;
@@ -734,7 +742,7 @@ public:
 
     std::map<std::string, std::string> properties; // Custom properties
 
-    // Optional components (like FBX node attributes)
+    // Optional components 
     std::shared_ptr<Mesh> mesh; // mesh has materials
     // std::shared_ptr<Light> light;
 
@@ -759,7 +767,7 @@ public:
         child->updateWorldTransform();
     }
 
-    void updateWorldTransform() {
+    virtual void updateWorldTransform() {
         // Build local transform
         glm::mat4 localTransform = glm::translate(glm::mat4(1.0f), localTranslation);
         localTransform = localTransform * glm::mat4_cast(localRotation);
@@ -780,7 +788,7 @@ public:
     }
 
     // Set world position directly
-    void setWorldPosition(const glm::vec3& worldPos) {
+    virtual void setWorldPosition(const glm::vec3& worldPos) {
         if (parent) {
             // Convert world position to local space
             glm::vec3 parentWorldPos = glm::vec3(parent->worldTransform[3]);

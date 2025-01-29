@@ -10,7 +10,7 @@ public:
     unsigned int shadowWidth, shadowHeight;
 
     ShadowMap(unsigned int width = 2048, unsigned int height = 2048)
-        : shadowWidth(width), shadowHeight(height) {
+        : shadowWidth(width), shadowHeight(height), depthMap(0), depthMapFBO(0) {
     }
 
     void initialize() {
@@ -41,17 +41,28 @@ public:
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
+
+        // Verify framebuffer is complete
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            std::cerr << "Shadow Map Framebuffer is not complete!" << std::endl;
+        }
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 
     void bindForWriting() {
         glViewport(0, 0, shadowWidth, shadowHeight);
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-        glClear(GL_DEPTH_BUFFER_BIT);
+        
     }
 
-    void bindForReading(GLuint textureUnit = GL_TEXTURE1) {
+    void bindForReading(GLuint textureUnit) {
+
+        // Bind shadow map to specified unit
         glActiveTexture(textureUnit);
         glBindTexture(GL_TEXTURE_2D, depthMap);
+
+
     }
 };

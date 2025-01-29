@@ -32,17 +32,6 @@ std::string textFragment_shaderPATH_string = getProjectRoot() + "/text_fragment_
 const char* textVertex_shaderPATH = textVertex_shaderPATH_string.c_str();
 const char* textFragment_shaderPATH = textFragment_shaderPATH_string.c_str();
 
-std::string depthVertexShaderPATH_string = getProjectRoot() + "/depth_vertex_shader.glsl";
-std::string depthFragmentShaderPATH_string = getProjectRoot() + "/depth_fragment_shader.glsl";
-const char* depthVertexShaderPATH = depthVertexShaderPATH_string.c_str();
-const char* depthFragmentShaderPATH = depthFragmentShaderPATH_string.c_str();
-
-std::string mainVetexShaderPATH_string = getProjectRoot() + "/main_vertex_shader.glsl";
-std::string mainFragmentShaderPATH_string = getProjectRoot() + "/main_fragment_shader.glsl";
-const char* mainVetexShaderPATH = mainVetexShaderPATH_string.c_str();
-const char* mainFragmentShaderPATH = mainFragmentShaderPATH_string.c_str();
-
-
 // Screen dimensions
 int screenWidth = 1792;
 int screenHeight = 1008;
@@ -68,22 +57,11 @@ float deltaTime_sim = 0.0f; // Time difference between frames for simulation
 //debugging
 GLuint debugDepthShaderProgram; // for rendering depth map to quad
 
-
 //text shaders
 GLuint textShaderProgram;
-GLuint testShaderProgram;
 
 // light prop
-glm::vec3 lightPos(0.0f, 15.0f, 0.0f); // Example light position, dist from earth to sun is 150.4*10^9 m
-glm::vec3 lightColor(1.0f, 1.0f, 1.0f); // White light
-float luminousPower = 30.0f; // Luminous flux of the light source
 bool trackLight = false; // Make camera same as light view
-
-// for depth map and shadows
-glm::mat4 lightProjection, lightView;
-glm::mat4 lightSpaceMatrix;
-float near_plane = 0.1f, far_plane = 50.0f; // for shadow mapping
-
 
 // for selected nodes
 std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected Node pointer
@@ -97,10 +75,7 @@ void setupScene() {
     glShadeModel(GL_SMOOTH);
 
     // Initialize shadow rendering
-    scene.shadowRenderer.initialize(depthVertexShaderPATH, depthFragmentShaderPATH,
-        mainVetexShaderPATH, mainFragmentShaderPATH);
-    scene.shadowRenderer.setLightProperties(lightPos, lightColor, luminousPower);
-    scene.shadowRenderer.setShadowProperties(near_plane, far_plane);
+    scene.shadowRenderer.initialize();
 
     scene.uvViewer.initialize();
 
@@ -115,6 +90,9 @@ void setupScene() {
     glm::mat4 textProjection = glm::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight);
     glUseProgram(textShaderProgram);
     glUniformMatrix4fv(glGetUniformLocation(textShaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(textProjection));
+
+
+    //new frame imgui??
 
 }
 
@@ -141,8 +119,7 @@ int main() {
         return -1;
     }
 
-    // what is the exe dir?
-    std::cout << getProjectRoot() << std::endl;
+    std::cout << "Project root = " << getProjectRoot() << std::endl;
 
     glfwMakeContextCurrent(window);
 
@@ -225,7 +202,7 @@ int main() {
 
 
         // for viewing uv's
-        scene.uvViewer.setupMeshUVs(model->mesh);
+        //scene.uvViewer.setupMeshUVs(model->mesh);
 
         showUVs = false;
     }
@@ -233,9 +210,10 @@ int main() {
         std::cout << "Import failed: " << importer.getLastError() << std::endl;
     }
 
-
-    auto lightVisualizer = std::make_shared<SphereNode>(0.1f, 10, 10);
-    lightVisualizer->setWorldPosition(lightPos);
+    auto canModel = importer.importGLB(getProjectRoot() + "/blender/mtn dew can.glb");
+    if (canModel) {
+        scene.addNode(canModel);
+    }
 
 
     //tube stuff
@@ -340,7 +318,7 @@ int main() {
     binNode->setMaterial(glassMaterial);
 
     auto binBody = std::make_shared<BinBody>(binNode, true);  // true for static
-    scene.addPhysicsBody(binBody, "my_bin");
+    //scene.addPhysicsBody(binBody, "my_bin");
 
     // Define bounding box for sphere generation
     glm::vec3 boxMin(0.0f, 0.0f, 0.0f);  
@@ -387,17 +365,17 @@ int main() {
        
 
         // Debug visualization: render depth map to quad
-        // glViewport(0, 0, screenWidth / 4, screenHeight / 4);
-        // renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(), scene.shadowRenderer.getLightSpaceMatrix(),near_plane, far_plane);
-        // 
-        // glViewport(0, 0, screenWidth, screenHeight);
+        glViewport(0, 0, screenWidth / 4, screenHeight / 4);
+        renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(1).depthMap, scene.shadowRenderer.getLightSpaceMatrix(1), scene.shadowRenderer.getNearPlane(), scene.shadowRenderer.getFarPlane());
+        
+        glViewport(0, 0, screenWidth, screenHeight);
 
 
         // uv debug
-        if (showUVs) {  
-            GLuint textureId = model->mesh->materials[0]->textureMaps["baseColor"].textureId;
-            scene.uvViewer.render(textureId);
-        }
+        // if (showUVs) {  
+        //     GLuint textureId = model->mesh->materials[0]->textureMaps["baseColor"].textureId;
+        //     scene.uvViewer.render(textureId);
+        // }
 
 
         //draw menu after objects

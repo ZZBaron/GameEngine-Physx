@@ -1,10 +1,12 @@
 #version 330 core
 out vec4 FragColor;
 
+const int MAX_SPOT_LIGHTS = 4;
+
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoord;
-in vec4 FragPosLightSpace;
+in vec4 FragPosLightSpace[MAX_SPOT_LIGHTS];
 in vec3 Tangent;
 
 // Texture projection modes
@@ -94,12 +96,35 @@ struct Material {
 
 };
 
+// Lights properties
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+    float constant;
+    float linear;
+    float quadratic;
+    float radius;
+};
+
+struct SpotLight {
+    vec3 position;
+    vec3 direction;
+    vec3 color;
+    float intensity;
+    float constant;
+    float linear;
+    float quadratic;
+    float innerCutoff;
+    float outerCutoff;
+};
+
 // Light properties
-uniform vec3 lightPos;
-uniform vec3 lightColor;
-uniform float luminousPower;
+uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
+uniform int numActiveSpotLights;
+
 uniform vec3 viewPos;
-uniform sampler2D shadowMap;
+uniform sampler2D shadowMaps[MAX_SPOT_LIGHTS];
 uniform Material material;
 
 
@@ -201,14 +226,120 @@ vec2 getProjectedUV(vec2 baseUV, int projectionType, vec3 worldPos, vec3 normal)
     return projectedUV;
 }
 
+float calcSpotLightShadow(sampler2D shadowMap, vec4 fragPosLightSpace) {
+    // Perspective divide
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    // Transform to [0,1] range
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // Check if fragment is in bounds
+    if (projCoords.z > 1.0) return 0.0;
+
+    // Get depth of current fragment from light's perspective
+    float currentDepth = projCoords.z;
+
+    // PCF Sampling for softer shadows
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+    return shadow;
+}
+
+vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, int lightIndex, vec3 albedo) {
+    vec3 lightDir = normalize(light.position - fragPos);
+
+    // Spot light cone calculation
+    float theta = dot(lightDir, normalize(-light.direction));
+    float epsilon = light.innerCutoff - light.outerCutoff;
+    float intensity = clamp((theta - light.outerCutoff) / epsilon, 0.0, 1.0);
+
+    // If outside the cone, return no light
+    if (theta < light.outerCutoff) return vec3(0.0);
+
+
+
+    // Calculate attenuation
+    float distance = length(light.position - fragPos);
+    float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * distance * distance);
+
+    // Calculate shadow
+    float shadow = calcSpotLightShadow(shadowMaps[lightIndex], FragPosLightSpace[lightIndex]);
+
+    // Calculate standard vectors and dot products
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float NoV = max(dot(normal, viewDir), EPSILON);
+    float NoL = max(dot(normal, lightDir), EPSILON);
+    float NoH = max(dot(normal, halfwayDir), EPSILON);
+    float VoH = max(dot(viewDir, halfwayDir), EPSILON);
+    float LoH = max(dot(lightDir, halfwayDir), EPSILON);
+
+    // Base material properties
+    vec3 F0 = mix(vec3(0.04), albedo, material.metallic);
+
+    // Standard PBR terms
+    float D = D_GGX(NoH, material.roughness);
+    vec3 F = F_Schlick(VoH, F0, material.roughness);
+    float G = G_Smith(NoV, NoL, material.roughness);
+    vec3 specular = (D * F * G) / max(4.0 * NoV * NoL, EPSILON);
+
+    // Diffuse term with subsurface scattering
+    vec3 diffuse = DisneyDiffuse(albedo, material.roughness, NoV, NoL, VoH, material.metallic);
+    if (material.subsurface > 0.0) {
+        vec3 subsurfaceColor = SubsurfaceScattering(lightDir, viewDir, normal,
+            albedo, material.subsurface,
+            material.subsurfaceColor, material.subsurfaceRadius);
+        diffuse = mix(diffuse, subsurfaceColor, material.subsurface);
+    }
+
+    // Sheen term
+    vec3 sheenColor = mix(vec3(1.0), albedo, material.sheenTint);
+    float sheenDistribution = D_Charlie(material.roughness, NoH);
+    vec3 sheenSpecular = material.sheen * sheenColor * sheenDistribution;
+
+    // Clearcoat term
+    float Dr = D_GGX(NoH, material.clearcoatRoughness);
+    float Fr = F_Schlick(VoH, vec3(0.04), 0.0).r;
+    float Gr = G_Smith(NoV, NoL, material.clearcoatRoughness);
+    float clearcoatSpecular = material.clearcoat * (Dr * Fr * Gr) / max(4.0 * NoV * NoL, EPSILON);
+
+    // Transmission term
+    vec3 transmission = vec3(0.0);
+    if (material.transmission > 0.0) {
+        vec3 transmissionRay = refract(-viewDir, normal, 1.0 / material.ior);
+        // Simple approximation of transmission without ray tracing
+        transmission = albedo * (1.0 - F) * material.transmission;
+    }
+
+    // Combine all lighting components
+    vec3 radiance = light.color * light.intensity * attenuation * intensity;
+    vec3 directLighting = (1.0 - shadow) * radiance * NoL * (
+        diffuse +
+        specular +
+        sheenSpecular +
+        vec3(clearcoatSpecular)
+        );
+
+    return directLighting + transmission;
+}
+
 
 void main() {
     // Sample all textures with their transforms
-    vec3 albedo = material.baseColor;
+    vec3 albedo = vec3(1.0);
     if (material.hasBaseColorMap) {
         vec2 baseColorUV = getProjectedUV(TexCoord, material.baseColorProjection, FragPos, Normal);
         baseColorUV = (baseColorUV * material.baseColorTiling) + material.baseColorOffset;
         albedo *= texture(material.baseColorMap, baseColorUV).rgb;
+    }
+    else {
+        albedo = material.baseColor;
     }
 
     // Normal mapping
@@ -216,6 +347,7 @@ void main() {
     vec3 T = normalize(Tangent);
     vec3 B = normalize(cross(N, T));
     mat3 TBN = mat3(T, B, N);
+    vec3 V = normalize(viewPos - FragPos);
 
     // Sample normal map with projection
     if (material.hasNormalMap) {
@@ -266,91 +398,17 @@ void main() {
     }
 
 
-
-    // Prepare vectors and dot products
-    vec3 V = normalize(viewPos - FragPos);
-    vec3 L = normalize(lightPos - FragPos);
-    vec3 H = normalize(V + L);
-    vec3 R = reflect(-L, N);
-
-    float NoV = max(dot(N, V), EPSILON);
-    float NoL = max(dot(N, L), EPSILON);
-    float NoH = max(dot(N, H), EPSILON);
-    float VoH = max(dot(V, H), EPSILON);
-    float LoH = max(dot(L, H), EPSILON);
-
-    // Anisotropic calculations
-    vec3 X = T;
-    vec3 Y = B;
-    float HoX = dot(H, X);
-    float HoY = dot(H, Y);
-    float ax = max(0.001, roughness * (1.0 + material.anisotropic));
-    float ay = max(0.001, roughness * (1.0 - material.anisotropic));
-
-    // Calculate base F0 with metallic workflow
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
-
-    // Specular BRDF
-    float D = material.anisotropic > 0.0 ?
-        D_GGX_Anisotropic(NoH, HoX, HoY, ax, ay) :
-        D_GGX(NoH, roughness);
-    vec3 F = F_Schlick(VoH, F0, roughness);
-    float G = G_Smith(NoV, NoL, roughness);
-    vec3 specular = (D * F * G) / max(4.0 * NoV * NoL, EPSILON);
-
-    // Diffuse BRDF
-    vec3 diffuse = DisneyDiffuse(albedo, roughness, NoV, NoL, VoH, metallic);
-
-    // Subsurface scattering
-    vec3 subsurface = SubsurfaceScattering(L, V, N, albedo, material.subsurface,
-        material.subsurfaceColor, material.subsurfaceRadius);
-
-    // Sheen
-    vec3 sheenColor = mix(vec3(1.0), albedo, material.sheenTint);
-    float sheenDistribution = D_Charlie(roughness, NoH);
-    vec3 sheenSpecular = material.sheen * sheenColor * sheenDistribution;
-
-    // Clearcoat
-    float Dr = D_GGX(NoH, material.clearcoatRoughness);
-    float Fr = F_Schlick(VoH, vec3(0.04), 0.0).r;
-    float Gr = G_Smith(NoV, NoL, material.clearcoatRoughness);
-    float clearcoatSpecular = material.clearcoat * (Dr * Fr * Gr) / max(4.0 * NoV * NoL, EPSILON);
-
-    // Calculate shadow
-    float shadow = 0.0;
-    vec3 projCoords = FragPosLightSpace.xyz / FragPosLightSpace.w;
-    projCoords = projCoords * 0.5 + 0.5;
-
-    if (projCoords.z <= 1.0) {
-        float currentDepth = projCoords.z;
-        float bias = max(0.05 * (1.0 - NoL), 0.005);
-
-        vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-        for (int x = -2; x <= 2; ++x) {
-            for (int y = -2; y <= 2; ++y) {
-                float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-                shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
-            }
-        }
-        shadow /= 25.0;
+    // Accumulate light from all spot lights
+    vec3 lighting = vec3(0.0);
+    for (int i = 0; i < numActiveSpotLights && i < MAX_SPOT_LIGHTS; ++i) {
+        lighting += calcSpotLight(spotLights[i], N, FragPos, V, i, albedo);
     }
 
-    // Calculate light attenuation and radiance
-    float distance = length(lightPos - FragPos);
-    float attenuation = luminousPower / (distance * distance);
-    vec3 radiance = lightColor * attenuation;
-
     // Combine all lighting components
-    vec3 ambient = albedo * 0.03 * occlusion;
-    vec3 directLight = (1.0 - shadow) * radiance * NoL;
+    vec3 ambient = albedo * 0.03;
+    vec3 color = ambient + lighting;
 
-    vec3 color = ambient + directLight * (
-        diffuse +
-        specular +
-        subsurface +
-        sheenSpecular +
-        vec3(clearcoatSpecular)
-        );
+
 
     // Add emission
     if (material.hasEmissionMap) {
@@ -361,15 +419,6 @@ void main() {
         color += material.emission * material.emissionStrength;
     }
 
-    // Handle transmission
-    if (transmission > 0.0) {
-        vec3 transmissionColor = albedo;
-        float transmissionRoughness = material.transmissionRoughness;
-        vec3 transmissionRay = refract(-V, N, 1.0 / material.ior);
-        // Simple approximation of transmission without ray tracing
-        vec3 transmissionContribution = transmissionColor * (1.0 - F) * transmission;
-        color = mix(color, transmissionContribution, transmission);
-    }
 
     // Tone mapping (ACES approximation)
     const float a = 2.51;
@@ -388,4 +437,5 @@ void main() {
     //FragColor = vec4(fract(TexCoord), 0.0, 1.0); // This will show tiling patterns
     // debug override
     //FragColor = vec4(material.baseColor, 1.0);
+    
 }

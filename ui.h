@@ -308,7 +308,12 @@ public:
 
                             if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
                                 glm::vec3 worldPos = selectedNode->getWorldPosition();
-                                ImGui::Text("World Position: %.2f, %.2f, %.2f", worldPos.x, worldPos.y, worldPos.z);
+                                float position[3] = { worldPos.x, worldPos.y, worldPos.z };
+
+                                // If the position is modified, update the node
+                                if (ImGui::DragFloat3("World Position", position, 0.1f)) {
+                                    selectedNode->setWorldPosition(glm::vec3(position[0], position[1], position[2]));
+                                }
 
                                 ImGui::Text("Local Transform:");
                                 ImGui::Indent();
@@ -401,10 +406,34 @@ public:
 
                                     if (!selectedMaterial->textureMaps.empty()) {
                                         ImGui::Text("\nTexture Maps:");
+                                        ImGui::BeginTable("Texture Maps", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg);
+                                        ImGui::TableSetupColumn("Type");
+                                        ImGui::TableSetupColumn("ID");
+                                        ImGui::TableSetupColumn("UV Set");
+                                        ImGui::TableSetupColumn("Tiling");
+                                        ImGui::TableHeadersRow();
+
                                         for (const auto& [mapType, textureMap] : selectedMaterial->textureMaps) {
-                                            ImGui::Text("%s Map (ID: %u)", mapType.c_str(), textureMap.textureId);
+                                            ImGui::TableNextRow();
+
+                                            ImGui::TableNextColumn();
+                                            ImGui::Text("%s", mapType.c_str());
+
+                                            ImGui::TableNextColumn();
+                                            ImGui::Text("%u", textureMap.textureId);
+
+                                            ImGui::TableNextColumn();
+                                            ImGui::Text("%s", textureMap.uvSet.c_str());
+
+                                            ImGui::TableNextColumn();
+                                            ImGui::Text("%.2f, %.2f", textureMap.tiling.x, textureMap.tiling.y);
                                         }
+                                        ImGui::EndTable();
                                     }
+                                    else {
+                                        ImGui::Text("\nNo texture maps assigned");
+                                    }
+                                
 
                                     ImGui::Unindent();
                                 }
@@ -491,6 +520,93 @@ public:
                     ImGui::EndTabItem();
                 }
 
+                if (ImGui::BeginTabItem("Render")) {
+                    ImGui::BeginChild("RenderTab", ImVec2(0, 0), true);
+
+                    // Global render settings
+                    if (ImGui::CollapsingHeader("Render Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        bool drawObjs = scene.drawObjects;
+                        if (ImGui::Checkbox("Draw Objects", &drawObjs)) {
+                            scene.drawObjects = drawObjs;
+                        }
+
+                        bool drawWire = scene.drawWireframes;
+                        if (ImGui::Checkbox("Draw Wireframes", &drawWire)) {
+                            scene.drawWireframes = drawWire;
+                        }
+                    }
+
+                    // Shadow mapping section
+                    if (ImGui::CollapsingHeader("Shadow Maps", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        bool shadowsEnabled = scene.shadowRenderer.shadowsEnabled;
+                        if (ImGui::Checkbox("Enable Shadows", &shadowsEnabled)) {
+                            scene.shadowRenderer.toggleShadows(shadowsEnabled);
+                        }
+
+                        // Shadow map properties
+                        float nearPlane = scene.shadowRenderer.getNearPlane();
+                        float farPlane = scene.shadowRenderer.getFarPlane();
+                        if (ImGui::DragFloat("Shadow Near Plane", &nearPlane, 0.1f, 0.1f, farPlane)) {
+                            scene.shadowRenderer.setShadowProperties(nearPlane, farPlane);
+                        }
+                        if (ImGui::DragFloat("Shadow Far Plane", &farPlane, 0.1f, nearPlane, 100.0f)) {
+                            scene.shadowRenderer.setShadowProperties(nearPlane, farPlane);
+                        }
+
+                        // Display each shadow map's details
+                        ImGui::Text("\nShadow Maps:");
+                        for (int i = 0; i < scene.spotLights.size(); i++) {
+                            if (ImGui::TreeNode((void*)(intptr_t)i, "Shadow Map %d", i)) {
+                                ShadowMap shadowMap = scene.shadowRenderer.getShadowMap(i);
+
+                                // Display shadow map properties
+                                ImGui::Text("FBO ID: %u", shadowMap.depthMapFBO);
+                                ImGui::Text("Texture ID: %u", shadowMap.depthMap);
+                                ImGui::Text("Resolution: %ux%u", shadowMap.shadowWidth, shadowMap.shadowHeight);
+
+                                // Display light space matrix
+                                glm::mat4 lightSpaceMatrix = scene.shadowRenderer.getLightSpaceMatrix(i);
+                                if (ImGui::TreeNode("Light Space Matrix")) {
+                                    for (int row = 0; row < 4; row++) {
+                                        ImGui::Text("%.2f, %.2f, %.2f, %.2f",
+                                            lightSpaceMatrix[row][0],
+                                            lightSpaceMatrix[row][1],
+                                            lightSpaceMatrix[row][2],
+                                            lightSpaceMatrix[row][3]);
+                                    }
+                                    ImGui::TreePop();
+                                }
+
+                                // Light properties affecting the shadow map
+                                auto& light = scene.spotLights[i];
+                                glm::vec3 lightPos = light->getWorldPosition();
+                                glm::vec3 lightDir = light->direction;
+
+                                ImGui::Text("\nLight Properties:");
+                                ImGui::Text("Position: %.2f, %.2f, %.2f", lightPos.x, lightPos.y, lightPos.z);
+                                ImGui::Text("Direction: %.2f, %.2f, %.2f", lightDir.x, lightDir.y, lightDir.z);
+                                ImGui::Text("Inner Cutoff: %.2f", light->innerCutoff);
+                                ImGui::Text("Outer Cutoff: %.2f", light->outerCutoff);
+                                ImGui::Text("Intensity: %.2f", light->intensity);
+
+                                ImGui::TreePop();
+                            }
+                        }
+                    }
+
+                    // Main shader program info
+                    if (ImGui::CollapsingHeader("Shader Programs")) {
+                        GLuint mainProgram = scene.shadowRenderer.getMainShaderProgram();
+                        GLuint depthProgram = scene.shadowRenderer.getDepthShaderProgram();
+
+                        ImGui::Text("Main Shader Program ID: %u", mainProgram);
+                        ImGui::Text("Depth Shader Program ID: %u", depthProgram);
+                    }
+
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
+
                 if (ImGui::BeginTabItem("Simulation")) {
                     ImGui::BeginChild("SimulationTab", ImVec2(0, 0), true);
 
@@ -526,13 +642,8 @@ public:
                     ImGui::Separator();
 
                     extern float deltaTime_sys;
-                    extern glm::vec3 lightPos;
-
-
 
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Delta Time: %.3f", deltaTime_sys);
-                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Light Position: (%.2f, %.2f, %.2f)",
-                        lightPos.x, lightPos.y, lightPos.z);
 
                     ImGui::EndChild();
                     ImGui::EndTabItem();

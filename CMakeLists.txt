@@ -76,7 +76,6 @@ set(ENGINE_HEADERS
     "input.h"
     "camera.h"
     "font.h"
-    
     "console.h"
     "randomGen.h"
     "debugRenderer.h"
@@ -90,6 +89,8 @@ set(ENGINE_HEADERS
     "PhysXSimulation.h"
     "object3D.h"
     "shadowMap.h"
+    "light.h"
+    "paths.h"
 )
 # Create executable
 add_executable(GameEnginePhysx 
