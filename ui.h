@@ -8,6 +8,7 @@
 #include "scene.h"
 #include "fileDialog.h"
 #include "modelImporter.h"
+#include "ImGuiFileDialog.h"
 
 
 
@@ -271,8 +272,33 @@ public:
                         
                         // File Dialog Window
                         if (showFileDialog) {
-                            if (FileDialog::showFileDialog("Import Model", { ".glb", ".fbx" })) {
-                                std::string selectedFile = FileDialog::getSelectedFile();
+                            IGFD::FileDialogConfig config;
+                            config.path = ".";
+                            config.countSelectionMax = 1;
+                            config.flags = ImGuiFileDialogFlags_Modal;
+
+                            // Get the main viewport size
+                            ImGuiViewport* viewport = ImGui::GetMainViewport();
+                            ImVec2 viewportSize = viewport->Size;
+
+                            // Set the dialog size to 80% of the viewport size
+                            ImVec2 dialogSize(viewportSize.x * 0.8f, viewportSize.y * 0.8f);
+
+                            ImGuiFileDialog::Instance()->OpenDialog(
+                                "ImportModelDialog",
+                                "Choose Model File",
+                                ".glb,.fbx,{.glb,.fbx}",
+                                config);
+                        }
+
+                        if (ImGuiFileDialog::Instance()->Display(
+                            "ImportModelDialog",
+                            ImGuiWindowFlags_NoCollapse,
+                            ImVec2(400, 300),    // minimum size
+                            ImVec2(FLT_MAX, FLT_MAX)))  // maximum size (unlimited)
+                            {
+                            if (ImGuiFileDialog::Instance()->IsOk()) {
+                                std::string selectedFile = ImGuiFileDialog::Instance()->GetFilePathName();
                                 if (!selectedFile.empty()) {
                                     ModelImporter importer;
                                     auto importedNode = importer.importGLB(selectedFile);
@@ -287,8 +313,8 @@ public:
                                     }
                                 }
                                 showFileDialog = false;
-                                FileDialog::clearSelection();
                             }
+                            ImGuiFileDialog::Instance()->Close();
                         }
 
                         // Import Error Popup

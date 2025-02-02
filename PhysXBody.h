@@ -46,20 +46,6 @@ public:
 
 
     void createActor() {
-        std::cout << "\n=== PhysXBody::createActor() ===\n";
-        std::cout << "Node world transform before physics init:\n";
-        for (int i = 0; i < 4; i++) {
-            std::cout << "[ ";
-            for (int j = 0; j < 4; j++) {
-                std::cout << node->worldTransform[i][j] << " ";
-            }
-            std::cout << "]\n";
-        }
-
-        std::cout << "Node world position: " <<
-            node->worldTransform[3][0] << ", " <<
-            node->worldTransform[3][1] << ", " <<
-            node->worldTransform[3][2] << "\n";
 
         PxPhysics* physics = PhysXManager::getInstance().getPhysics();
 

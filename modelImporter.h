@@ -6,6 +6,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include "animation.h"
 
 class ModelImporter {
 private:
@@ -351,6 +352,44 @@ private:
     std::shared_ptr<Mesh> processMesh(aiMesh* mesh, const aiScene* scene) {
         auto newMesh = std::make_shared<Mesh>(false);
 
+        // Check if the scene has animations
+        if (scene->HasAnimations()) {
+            auto animatedMesh = std::make_shared<AnimatedMesh>();
+
+            // Process bone data if present
+            if (mesh->HasBones()) {
+                std::map<std::string, int> boneMapping;
+                animatedMesh->boneData.resize(mesh->mNumVertices);
+
+                for (unsigned int i = 0; i < mesh->mNumBones; i++) {
+                    const aiBone* bone = mesh->mBones[i];
+                    std::string boneName = bone->mName.data;
+                    int boneIndex;
+
+                    if (boneMapping.find(boneName) == boneMapping.end()) {
+                        boneIndex = animatedMesh->armature.bones.size();
+                        boneMapping[boneName] = boneIndex;
+
+                        glm::mat4 offsetMatrix = aiToGlmMatrix(bone->mOffsetMatrix);
+                        animatedMesh->armature.addBone(boneName, offsetMatrix);
+                    }
+                    else {
+                        boneIndex = boneMapping[boneName];
+                    }
+
+                    for (unsigned int j = 0; j < bone->mNumWeights; j++) {
+                        const aiVertexWeight& weight = bone->mWeights[j];
+                        animatedMesh->boneData[weight.mVertexId].addBoneInfluence(boneIndex, weight.mWeight);
+                    }
+                }
+            }
+
+            newMesh = animatedMesh;
+        }
+        else {
+            newMesh = std::make_shared<Mesh>(false);
+        }
+
         // Track unique vertex-UV combinations
         struct VertexData {
             glm::vec3 position;
@@ -387,7 +426,7 @@ private:
                 // UV coordinates
                 if (mesh->HasTextureCoords(0)) {
                     const aiVector3D& uv = mesh->mTextureCoords[0][vertexIndex];
-                    vertex.uv = glm::vec2(uv.x, 1.0f - uv.y); // Flip Y for OpenGL
+                    vertex.uv = glm::vec2(uv.x, uv.y);
                 }
 
                 // Find if this exact vertex (position + normal + UV) exists
@@ -424,13 +463,14 @@ private:
         }
 
         newMesh->setupBuffers();
-        debugMesh(mesh, scene, newMesh);
+        //debugMesh(mesh, scene, newMesh);
 
         return newMesh;
     }
 
     void processNode(aiNode* node, const aiScene* scene, std::shared_ptr<Node> engineNode) {
         // Process transforms
+        std::cout << "\n --- Calling processNode --- \n";
         glm::mat4 transform = aiToGlmMatrix(node->mTransformation);
         engineNode->localTranslation = glm::vec3(transform[3]);
         engineNode->localRotation = glm::quat(transform);
@@ -439,6 +479,69 @@ private:
         // Process meshes
         if (node->mNumMeshes > 0) {
             engineNode->mesh = processMesh(scene->mMeshes[node->mMeshes[0]], scene);
+        }
+
+        // If this node has animations, process them
+        if (scene->HasAnimations()) {
+            std::cout << "scene has animations" << std::endl;
+            auto animatedMesh = std::dynamic_pointer_cast<AnimatedMesh>(engineNode->mesh);
+            if (animatedMesh) {
+                // Process all animations in the scene
+                for (unsigned int i = 0; i < scene->mNumAnimations; i++) {
+                    const aiAnimation* anim = scene->mAnimations[i];
+                    Action action;
+                    action.name = anim->mName.C_Str();
+                    action.duration = static_cast<float>(anim->mDuration / anim->mTicksPerSecond);
+
+                    // Find animation channels targeting this node
+                    for (unsigned int j = 0; j < anim->mNumChannels; j++) {
+                        const aiNodeAnim* nodeAnim = anim->mChannels[j];
+                        if (std::string(nodeAnim->mNodeName.C_Str()) == engineNode->name) {
+                            AnimationChannel channel;
+                            channel.targetProperty = engineNode->name;
+
+                            // Process position keyframes
+                            for (unsigned int k = 0; k < nodeAnim->mNumPositionKeys; k++) {
+                                const auto& key = nodeAnim->mPositionKeys[k];
+                                Keyframe keyframe;
+                                keyframe.time = static_cast<float>(key.mTime / anim->mTicksPerSecond);
+                                keyframe.position = glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z);
+                                channel.addKeyframe(keyframe);
+                            }
+
+                            // Process rotation keyframes
+                            for (unsigned int k = 0; k < nodeAnim->mNumRotationKeys; k++) {
+                                const auto& key = nodeAnim->mRotationKeys[k];
+                                Keyframe keyframe;
+                                keyframe.time = static_cast<float>(key.mTime / anim->mTicksPerSecond);
+                                keyframe.rotation = glm::quat(key.mValue.w, key.mValue.x, key.mValue.y, key.mValue.z);
+                                channel.addKeyframe(keyframe);
+                            }
+
+                            // Process scaling keyframes
+                            for (unsigned int k = 0; k < nodeAnim->mNumScalingKeys; k++) {
+                                const auto& key = nodeAnim->mScalingKeys[k];
+                                Keyframe keyframe;
+                                keyframe.time = static_cast<float>(key.mTime / anim->mTicksPerSecond);
+                                keyframe.scale = glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z);
+                                channel.addKeyframe(keyframe);
+                            }
+
+                            action.channels.push_back(channel);
+                        }
+                    }
+
+                    if (!action.channels.empty()) {
+                        animatedMesh->actions.push_back(action);
+                    }
+                }
+
+                // Initialize armature if we have bone animations
+                if (!animatedMesh->armature.bones.empty()) {
+                    animatedMesh->armature.initialize(scene->mRootNode);
+                }
+            }
+            engineNode->mesh = animatedMesh;
         }
 
         // Process children

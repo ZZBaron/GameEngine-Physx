@@ -60,6 +60,9 @@ public:
     UVViewer uvViewer;
     bool showUVs = false;
 
+    // Animation system (for controlling all the animations playing in scene)
+    AnimationSystem animationSystem;
+
 	Scene() : ambientLight(0.1f, 0.1f, 0.1f) {
 		// Create and set up default camera
 		auto defaultCamera = std::make_shared<Camera>("Default");
@@ -78,6 +81,8 @@ public:
         light2->setWorldPosition(glm::vec3(0.0f, 3.0f, 0.0f));
         light2->intensity = 10.0f;
         light2->direction = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
+        light2->innerCutoff = glm::cos(glm::radians(25.0f));    // Inner angle of 25 degrees
+        light2->outerCutoff = glm::cos(glm::radians(35.0f));    // Outer angle of 35 degrees
         addSpotLight(light2);
 	}
 
@@ -151,6 +156,10 @@ public:
     // Scene Update and Rendering
     void update(float deltaTime) {
         if (play) {
+
+            // Update animations
+            animationSystem.update(deltaTime);
+
             // Update physics
             physicsWorld.updateSimulation(deltaTime);
 
@@ -284,6 +293,73 @@ public:
 
         // Restore previous shader program
         glUseProgram(currentProgram);
+    }
+
+    // Animation control methods
+    void playAction(const std::string& actionName, const std::string& nodeName,
+        AnimationSystem::PlaybackMode mode = AnimationSystem::PlaybackMode::LOOP) {
+        auto node = getNode(nodeName);
+        if (!node) return;
+
+        // Find the action in the node's mesh
+        if (auto animatedMesh = std::dynamic_pointer_cast<AnimatedMesh>(node->mesh)) {
+            for (const auto& action : animatedMesh->actions) {
+                if (action.name == actionName) {
+                    // Create a unique name for this action instance
+                    std::string uniqueName = nodeName + "_" + actionName;
+                    animationSystem.playAction(uniqueName,
+                        std::make_shared<Action>(action),
+                        node,  
+                        mode);
+                    return;
+                }
+            }
+        }
+    }
+
+    void stopAction(const std::string& actionName, const std::string& nodeName) {
+        std::string uniqueName = nodeName + "_" + actionName;
+        animationSystem.stopAction(uniqueName);
+    }
+
+    void pauseAction(const std::string& actionName, const std::string& nodeName) {
+        std::string uniqueName = nodeName + "_" + actionName;
+        animationSystem.pauseAction(uniqueName);
+    }
+
+    void resumeAction(const std::string& actionName, const std::string& nodeName) {
+        std::string uniqueName = nodeName + "_" + actionName;
+        animationSystem.resumeAction(uniqueName);
+    }
+
+    void stopAllActions() {
+        animationSystem.stopAllActions();
+    }
+
+    // Get list of available actions for a node
+    std::vector<std::string> getAvailableActions(const std::string& nodeName) {
+        std::vector<std::string> actions;
+        auto node = getNode(nodeName);
+        if (node) {
+            if (auto animatedMesh = std::dynamic_pointer_cast<AnimatedMesh>(node->mesh)) {
+                for (const auto& action : animatedMesh->actions) {
+                    actions.push_back(action.name);
+                }
+            }
+        }
+        return actions;
+    }
+
+    void debugAnimations() {
+        std::cout << "\n=== Scene Animations Debug ===\n";
+        for (const auto& [name, activeAction] : animationSystem.getActiveActions()) {
+            std::cout << "Action: " << name << std::endl;
+            std::cout << "  Target Node: " << (activeAction.targetNode ? activeAction.targetNode->name : "none") << std::endl;
+            std::cout << "  Playing: " << (activeAction.isPlaying ? "yes" : "no") << std::endl;
+            std::cout << "  Weight: " << activeAction.weight << std::endl;
+            std::cout << "  Speed: " << activeAction.speed << std::endl;
+            std::cout << "  Mode: " << static_cast<int>(activeAction.mode) << std::endl;
+        }
     }
 
     void togglePlayer() {

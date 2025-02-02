@@ -4,6 +4,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+// Not Currently used, i use ImGuiFileDialog instead
+
 namespace fs = std::filesystem;
 
 class FileDialog {

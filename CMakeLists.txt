@@ -53,6 +53,11 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
+set(IMGUIFILEDIALOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui/ImGuiFileDialog")
+set(IMGUIFILEDIALOG_SOURCES
+    "${IMGUIFILEDIALOG_DIR}/ImGuiFileDialog.cpp"
+)
+
 set(MFEM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/mfem")
 
 
@@ -91,12 +96,14 @@ set(ENGINE_HEADERS
     "shadowMap.h"
     "light.h"
     "paths.h"
+    "animation.h"
 )
 # Create executable
 add_executable(GameEnginePhysx 
     ${ENGINE_SOURCES}
     ${ENGINE_HEADERS}
     ${IMGUI_SOURCES}
+    ${IMGUIFILEDIALOG_SOURCES}
   "shadowRenderer.h"   "primitveNodes.h" "scene.h"   "textureManager.h" "modelImporter.h" "Nodes/tube.h" "curveParameterization.h" "fileDialog.h" "background.h" "Nodes/bin.h" "player.h" "surfaceParameterization.h" "object2D.h" "renderer2D.h" "scene2D.h" "camera2D.h" "PhysXBody2D.h" "UVviewer.h")
 
 
@@ -106,7 +113,9 @@ target_include_directories(GameEnginePhysx PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
+    ${IMGUIFILEDIALOG_DIR}
     ${MFEM_DIR}
+
 )
 
 # Platform-specific configurations

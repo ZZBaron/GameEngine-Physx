@@ -65,12 +65,10 @@ public:
 
     void renderShadowPass(const std::vector<std::shared_ptr<Node>>& sceneNodes) {
         if (!shadowsEnabled) return;
-        std::cout << "\n --- Calling renderShadowPass --- \n";
 
         // Update for each active light
         for (size_t i = 0; i < activeLights.size() && i < MAX_SPOT_LIGHTS; ++i) {
             auto& light = activeLights[i];
-            std::cout << i << std::endl;
 
             // Calculate light space matrix for this light
             glm::mat4 lightProjection = glm::perspective(
@@ -114,14 +112,6 @@ public:
     void prepareMainPass(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos) {
 
         glUseProgram(mainShaderProgram);
-
-        //debug texture units
-        GLint boundTextures[16];
-        for (int i = 0; i < 16; i++) {
-            glActiveTexture(GL_TEXTURE0 + i);
-            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTextures[i]);
-            std::cout << "Texture unit " << i << " bound to: " << boundTextures[i] << std::endl;
-        }
 
         // Set common uniforms
         glUniformMatrix4fv(glGetUniformLocation(mainShaderProgram, "projection"),
@@ -173,22 +163,7 @@ public:
                     SHADOW_MAP_TEXTURE_UNIT + i);
             }
 
-            //  after binding shadow maps
-            for (size_t i = 0; i < activeLights.size() && i < MAX_SPOT_LIGHTS; ++i) {
-                GLint shadowTexture;
-                glActiveTexture(GL_TEXTURE0 + SHADOW_MAP_TEXTURE_UNIT + i);
-                glGetIntegerv(GL_TEXTURE_BINDING_2D, &shadowTexture);
-                std::cout << "Shadow map " << i << " bound to texture unit " << (SHADOW_MAP_TEXTURE_UNIT + i)
-                    << " with texture ID: " << shadowTexture << std::endl;
-
-                // Verify uniform location and value
-                GLint location = glGetUniformLocation(mainShaderProgram,
-                    ("shadowMaps[" + std::to_string(i) + "]").c_str());
-                GLint value;
-                glGetUniformiv(mainShaderProgram, location, &value);
-                std::cout << "shadowMaps[" << i << "] uniform location: " << location
-                    << " value: " << value << std::endl;
-            }
+            
         }
 
 
@@ -196,10 +171,6 @@ public:
 
     void renderMainPass(const std::vector<std::shared_ptr<Node>>& sceneNodes, const glm::mat4& view, const glm::mat4& projection) {
         glUseProgram(mainShaderProgram);
-
-        GLint boundTex;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
-        std::cout << "Texture bound at start of renderMainPass: " << boundTex << std::endl;
 
         // Draw nodes in scene
         for (const auto& node : sceneNodes) {

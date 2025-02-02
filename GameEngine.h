@@ -18,7 +18,7 @@
 #include <string>
 #include <glm/gtc/constants.hpp>
 #include <map> //for managing keyStates
-#include <memory> // for rigid body stuff
+#include <memory> 
 #include <functional> //for arbitrary functions
 #include <sstream>
 #include <fstream> // for file reading

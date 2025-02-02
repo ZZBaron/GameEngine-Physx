@@ -164,6 +164,7 @@ int main() {
     // Create physics objects
 
     auto groundNode = std::make_shared<BoxNode>(10.0f, 0.5f, 10.0f);
+    groundNode->name = "ground";
     std::cout << "node pos before = " << vec3_to_string(groundNode->getWorldPosition()) << std::endl;
     groundNode->setWorldPosition(glm::vec3(0.0f, -1.5f, 0.0f));
     std::cout << "node pos after = " << vec3_to_string(groundNode->getWorldPosition()) << std::endl;
@@ -172,16 +173,6 @@ int main() {
 
     scene.addPhysicsBody(groundBody);
 
-    auto sphereNode = std::make_shared<SphereNode>(1.0f, 20, 20);
-    sphereNode->mesh->materials[0]->baseColor = glm::vec3(0.0f, 1.0f, 0.0f);  // RGB values for green
-    // Create physics body for the sphere
-    auto sphereBody = std::make_shared<PhysXBody>(sphereNode, false);  // false = dynamic body
-    scene.addPhysicsBody(sphereBody);
-
-    auto cylinderNode = std::make_shared<CylinderNode>(0.5f, 0.5f);
-    cylinderNode->setWorldPosition(glm::vec3(1.5f, 1.5f, 0.0f));
-    auto cylinderBody = std::make_shared<PhysXBody>(cylinderNode, false);
-    scene.addPhysicsBody(cylinderBody);
 
     //selectedRB = sphereBody; //maintains live reference
 
@@ -197,6 +188,9 @@ int main() {
     if (model) {
         //model->localScale = glm::vec3(0.01f, 0.01f, 0.01f);
         //model->updateWorldTransform();
+        // for (const auto& child : model->children) {
+        //     child->mesh->flipNormals();
+        // }
         scene.addNode(model);
 
 
@@ -210,10 +204,31 @@ int main() {
         std::cout << "Import failed: " << importer.getLastError() << std::endl;
     }
 
-    auto canModel = importer.importGLB(getProjectRoot() + "/blender/mtn dew can.glb");
-    if (canModel) {
-        scene.addNode(canModel);
-    }
+    // auto aniModel = importer.importGLB(getProjectRoot() + "/blender/test ani.glb");
+    // if (aniModel) {
+    //     scene.addNode(aniModel);
+    // }
+    // 
+    // std::cout << "\n --- Before Animation Check ---" << std::endl;
+    // // Play an animation - with proper casting
+    // if (auto animatedMesh = std::dynamic_pointer_cast<AnimatedMesh>(aniModel->mesh)) {
+    //     std::cout << "\n ---- Model has animated mesh ----" << std::endl;
+    //     // Print available animations
+    //     for (const auto& action : animatedMesh->actions) {
+    //         std::cout << "Found animation: " << action.name << " (duration: " << action.duration << "s)" << std::endl;
+    //     }
+    // 
+    //     // Play the first animation
+    //     scene.animationSystem.playAction("character_Walk",
+    //         std::make_shared<Action>(animatedMesh->actions[0]),
+    //         model,
+    //         AnimationSystem::PlaybackMode::LOOP);
+    // }
+
+    // auto manModel = importer.importGLB(getProjectRoot() + "/blender/Base Character.glb");
+    // if (manModel) {
+    //     scene.addNode(manModel);
+    // }
 
 
     //tube stuff
@@ -236,7 +251,7 @@ int main() {
     };
     auto tubeFromPoints = std::make_shared<TubeNode>(points, 0.1f);
 
-    scene.addNode(tubeFromCurve);
+    //scene.addNode(tubeFromCurve);
 
     //testing surfaces
     // Create wavy ground using multiple sine waves for interesting terrain
@@ -296,7 +311,7 @@ int main() {
     wavyGroundNode->mesh->materials[0] = groundMaterial;
 
     // Add to scene
-    scene.addNode(wavyGroundNode);
+    //scene.addNode(wavyGroundNode);
 
 
     //testing binBody
@@ -361,14 +376,11 @@ int main() {
         // Draw world axes
         drawAxes(scene.activeCamera->getViewMatrix(), scene.activeCamera->getProjectionMatrix()); 
 
-
-       
-
         // Debug visualization: render depth map to quad
-        glViewport(0, 0, screenWidth / 4, screenHeight / 4);
-        renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(1).depthMap, scene.shadowRenderer.getLightSpaceMatrix(1), scene.shadowRenderer.getNearPlane(), scene.shadowRenderer.getFarPlane());
-        
-        glViewport(0, 0, screenWidth, screenHeight);
+        // glViewport(0, 0, screenWidth / 4, screenHeight / 4);
+        // renderDepthMapToQuad(scene.shadowRenderer.getShadowMap(1).depthMap, scene.shadowRenderer.getLightSpaceMatrix(1), scene.shadowRenderer.getNearPlane(), scene.shadowRenderer.getFarPlane());
+        // 
+        // glViewport(0, 0, screenWidth, screenHeight);
 
 
         // uv debug

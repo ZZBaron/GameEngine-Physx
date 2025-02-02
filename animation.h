@@ -12,6 +12,7 @@
 // Maximum number of bones allowed to influence a vertex
 const int MAX_BONES = 100;
 
+
 // A keyframe represents a specific point in time for an animation channel
 class Keyframe {
 public:
@@ -391,4 +392,176 @@ private:
 
         mesh->armature.updateBoneTransforms();
     }
+};
+
+// Animation system that handles all animations in the scene
+class AnimationSystem {
+public:
+    enum class PlaybackMode {
+        PLAY,       // Normal forward playback
+        REVERSE,    // Reverse playback
+        PING_PONG,  // Play forward then backward
+        LOOP,       // Loop forward
+        LOOP_PING_PONG  // Loop forward and backward
+    };
+
+    struct ActiveAction {
+        std::shared_ptr<Action> action;
+        std::shared_ptr<Node> targetNode;
+        float startTime;
+        float weight;
+        float speed;
+        PlaybackMode mode;
+        bool isPlaying;
+        bool shouldRemove;
+    };
+
+    void update(float deltaTime) {
+        currentTime += deltaTime;
+
+        for (auto& [name, activeAction] : activeActions) {
+            if (!activeAction.isPlaying) continue;
+
+            float localTime = (currentTime - activeAction.startTime) * activeAction.speed;
+
+            // Handle different playback modes
+            float actionTime = 0.0f;
+            switch (activeAction.mode) {
+            case PlaybackMode::PLAY:
+                actionTime = localTime;
+                if (localTime > activeAction.action->duration) {
+                    activeAction.isPlaying = false;
+                    continue;
+                }
+                break;
+
+            case PlaybackMode::REVERSE:
+                actionTime = activeAction.action->duration - localTime;
+                if (actionTime < 0) {
+                    activeAction.isPlaying = false;
+                    continue;
+                }
+                break;
+
+            case PlaybackMode::LOOP:
+                actionTime = fmod(localTime, activeAction.action->duration);
+                break;
+
+            case PlaybackMode::PING_PONG:
+            {
+                float cycle = localTime / activeAction.action->duration;
+                if (static_cast<int>(cycle) % 2 == 0) {
+                    actionTime = fmod(localTime, activeAction.action->duration);
+                }
+                else {
+                    actionTime = activeAction.action->duration - fmod(localTime, activeAction.action->duration);
+                }
+            }
+            break;
+            }
+
+            // Evaluate each channel in the action
+            for (const auto& channel : activeAction.action->channels) {
+                glm::vec3 position;
+                glm::quat rotation;
+                glm::vec3 scale;
+
+                channel.evaluate(actionTime, position, rotation, scale);
+
+                // Apply transforms to target node
+                if (activeAction.targetNode) {
+                    // Blend with current transform based on weight
+                    if (activeAction.weight < 1.0f) {
+                        position = glm::mix(activeAction.targetNode->localTranslation, position, activeAction.weight);
+                        rotation = glm::slerp(activeAction.targetNode->localRotation, rotation, activeAction.weight);
+                        scale = glm::mix(activeAction.targetNode->localScale, scale, activeAction.weight);
+                    }
+
+                    activeAction.targetNode->localTranslation = position;
+                    activeAction.targetNode->localRotation = rotation;
+                    activeAction.targetNode->localScale = scale;
+                }
+            }
+        }
+
+        // Clean up finished non-looping animations
+        auto it = activeActions.begin();
+        while (it != activeActions.end()) {
+            if (!it->second.isPlaying || it->second.shouldRemove) {
+                it = activeActions.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+    }
+
+    void playAction(const std::string& name, std::shared_ptr<Action> action, std::shared_ptr<Node> target,
+        PlaybackMode mode = PlaybackMode::LOOP, float weight = 1.0f, float speed = 1.0f) {
+        ActiveAction activeAction;
+        activeAction.action = action;
+        activeAction.targetNode = target;
+        activeAction.startTime = currentTime;
+        activeAction.weight = weight;
+        activeAction.speed = speed;
+        activeAction.mode = mode;
+        activeAction.isPlaying = true;
+        activeAction.shouldRemove = false;
+
+        activeActions[name] = activeAction;
+    }
+
+    void stopAction(const std::string& name) {
+        auto it = activeActions.find(name);
+        if (it != activeActions.end()) {
+            it->second.shouldRemove = true;
+        }
+    }
+
+    void stopAllActions() {
+        for (auto& [name, action] : activeActions) {
+            action.shouldRemove = true;
+        }
+    }
+
+    void pauseAction(const std::string& name) {
+        auto it = activeActions.find(name);
+        if (it != activeActions.end()) {
+            it->second.isPlaying = false;
+        }
+    }
+
+    void resumeAction(const std::string& name) {
+        auto it = activeActions.find(name);
+        if (it != activeActions.end()) {
+            it->second.isPlaying = true;
+        }
+    }
+
+    void setActionWeight(const std::string& name, float weight) {
+        auto it = activeActions.find(name);
+        if (it != activeActions.end()) {
+            it->second.weight = std::clamp(weight, 0.0f, 1.0f);
+        }
+    }
+
+    void setActionSpeed(const std::string& name, float speed) {
+        auto it = activeActions.find(name);
+        if (it != activeActions.end()) {
+            it->second.speed = speed;
+        }
+    }
+
+    bool isActionPlaying(const std::string& name) const {
+        auto it = activeActions.find(name);
+        return it != activeActions.end() && it->second.isPlaying;
+    }
+
+    const std::map<std::string, ActiveAction>& getActiveActions() const {
+        return activeActions;
+    }
+
+private:
+    float currentTime = 0.0f;
+    std::map<std::string, ActiveAction> activeActions;
 };

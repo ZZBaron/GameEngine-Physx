@@ -255,11 +255,7 @@ public:
 
         stbi_image_free(data);
 
-        // Debug output
-        std::cout << "Loaded texture: " << path << std::endl;
-        std::cout << "Dimensions: " << width << "x" << height << ", Channels: " << channels << std::endl;
-        std::cout << "Internal format: " << internalFormat << std::endl;
-        DebugTextureState(textureID);
+        //DebugTextureState(textureID);
 
         return textureID;
     }

@@ -165,8 +165,6 @@ public:
                 // Activate texture unit and bind texture
                 glActiveTexture(GL_TEXTURE0 + mapping.unit);
                 glBindTexture(GL_TEXTURE_2D, it->second.textureId);
-                std::cout << "binding texture unit " << mapping.unit << " to id " << it->second.textureId << std::endl;
-
                 // Set texture uniform
                 glUniform1i(glGetUniformLocation(shaderProgram, mapping.uniformName.c_str()), mapping.unit);
 
@@ -285,6 +283,9 @@ public:
     std::vector<int> materialIds;  // Per-polygon material assignment
     std::vector<std::shared_ptr<Material>> materials;  // Material slots
 
+    //animation 
+    bool isAnimated = false;
+
     // OpenGL buffers
     GLuint VAO, VBO, EBO;
 
@@ -310,7 +311,7 @@ public:
         materials = vecMaterials;
     }
 
-    void setupBuffers() {
+    virtual void setupBuffers() {
         std::cout << "Setting up mesh buffers..." << std::endl;
         std::cout << "Positions: " << positions.size() << std::endl;
         std::cout << "Normals: " << normals.size() << std::endl;
@@ -508,7 +509,7 @@ public:
             glEnableVertexAttribArray(3);
             GLint enabled;
             glGetVertexAttribiv(3, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &enabled);
-            std::cout << "UV attribute enabled: " << enabled << std::endl;
+            //std::cout << "UV attribute enabled: " << enabled << std::endl;
         }
 
         // Bind materials if available
@@ -699,6 +700,8 @@ public:
         std::cout << "\n--- Mesh Debug ---" << std::endl;
         std::cout << "Materials vector size = " << materials.size() << std::endl;
     }
+
+    virtual ~Mesh() {}  // Makes Mesh polymorphic (can use dynamic cast)
 };
 
 // maybe this should be MeshType
