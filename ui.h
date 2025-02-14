@@ -135,7 +135,7 @@ public:
 
 
                     if (ImGui::TreeNode("Objects")) {
-                        static std::shared_ptr<Node> selectedNode = scene.selectedNodes[0]; // choose first to display
+                        static std::shared_ptr<Node> selectedNode = scene.selectedNodes.empty() ? nullptr : scene.selectedNodes[0];  // choose first to display
                         static bool showCreateWindow = false;
                         static bool showFileDialog = false;
                         static glm::vec3 importPosition(0.0f);

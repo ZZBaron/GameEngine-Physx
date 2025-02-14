@@ -107,13 +107,15 @@ public:
 
         // Load cubemap textures
         std::vector<std::string> faces{
-            getProjectRoot() + "/textures/nz.png", //right
-            getProjectRoot() + "/textures/pz.png", //left
-            getProjectRoot() + "/textures/py.png", //top
-            getProjectRoot() + "/textures/ny.png", //bottom
-            getProjectRoot() + "/textures/px.png", //front
-            getProjectRoot() + "/textures/nx.png" //back
+            getProjectRoot() + "/textures/cubemap_nx.png", // -x (left)
+            getProjectRoot() + "/textures/cubemap_px.png", // +x (right)
+            getProjectRoot() + "/textures/cubemap_py.png", // +y (top)
+            getProjectRoot() + "/textures/cubemap_ny.png", // -y (bottom)
+            getProjectRoot() + "/textures/cubemap_pz.png", // +z (front)
+            getProjectRoot() + "/textures/cubemap_nz.png" // -z (back)
         };
+
+
 
         skybox->loadCubemap(faces);
 

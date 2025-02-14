@@ -2,6 +2,7 @@
 out vec4 FragColor;
 
 const int MAX_SPOT_LIGHTS = 4;
+const float ambientFactor = 0.3;
 
 in vec3 FragPos;
 in vec3 Normal;
@@ -126,8 +127,6 @@ uniform int numActiveSpotLights;
 uniform vec3 viewPos;
 uniform sampler2D shadowMaps[MAX_SPOT_LIGHTS];
 uniform Material material;
-
-
 
 const float PI = 3.14159265359;
 const float EPSILON = 0.00001;
@@ -405,7 +404,7 @@ void main() {
     }
 
     // Combine all lighting components
-    vec3 ambient = albedo * 0.03;
+    vec3 ambient = albedo * ambientFactor;
     vec3 color = ambient + lighting;
 
 

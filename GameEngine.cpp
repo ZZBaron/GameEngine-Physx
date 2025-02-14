@@ -171,7 +171,7 @@ int main() {
     // test blender import
     // Import a model with textures
 
-    std::string modelPath = getProjectRoot() + "/blender/simple room.glb";
+    std::string modelPath = getProjectRoot() + "/blender/simple room33.glb";
 
     ModelImporter importer;
     bool showUVs = false;
