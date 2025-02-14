@@ -49,4 +49,7 @@ void main() {
 
     // Apply strength
     FragColor = vec4(color * strength, 1.0);
+
+    //debug override
+    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }

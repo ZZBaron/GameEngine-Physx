@@ -17,7 +17,7 @@ void main() {
     vec4 clipPos = projection * rotView * vec4(aPos, 1.0);
 
     // Ensure background is always at maximum depth
-    gl_Position = clipPos.xyww;
+    gl_Position = clipPos;
 
     // Calculate world position for environment mapping
     WorldPos = aPos;

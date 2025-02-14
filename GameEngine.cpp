@@ -69,15 +69,7 @@ std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected Node pointe
 Scene scene;
 
 void setupScene() {
-    glm::vec3 backGroundColor = glm::vec3(0.0f, 0.0f, 0.0f);
-    glClearColor(backGroundColor.x, backGroundColor.y, backGroundColor.z, 1.0f);
-    glEnable(GL_DEPTH_TEST);
-    glShadeModel(GL_SMOOTH);
-
-    // Initialize shadow rendering
-    scene.shadowRenderer.initialize();
-
-    scene.uvViewer.initialize();
+    scene.setup();
 
 
     debugDepthShaderProgram = initDebugDepthShader(); // for rendering depth map to quad
@@ -179,7 +171,7 @@ int main() {
     // test blender import
     // Import a model with textures
 
-    std::string modelPath = getProjectRoot() + "/blender/backrooms2.glb";
+    std::string modelPath = getProjectRoot() + "/blender/simple room.glb";
 
     ModelImporter importer;
     bool showUVs = false;
@@ -358,7 +350,7 @@ int main() {
 
         processInput(window);  // Process keyboard and mouse input
         
-        scene.update(deltaTime_sys);
+        scene.update(deltaTime_sys); // update animations, physics, etc.
 
          // Generate random spheres
          timeSinceLastGeneration += deltaTime_sys;
@@ -389,6 +381,7 @@ int main() {
         //     scene.uvViewer.render(textureId);
         // }
 
+        
 
         //draw menu after objects
         // Inside the main loop, just before glfwSwapBuffers(window):

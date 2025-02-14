@@ -4,6 +4,7 @@
 #include "ui.h"
 #include "camera.h"
 #include "console.h"
+#include "selection.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -13,6 +14,7 @@ extern Scene scene;
 
 bool consoleInputOnly = false;
 std::map<int, bool> keyStates; // Map to track key states
+std::map<int, bool> mouseButtonStates; // Map to track mouse button states
 extern bool genSpheres;
 
 
@@ -51,6 +53,24 @@ void press_once_noargs(GLFWwindow* window, int key, void(*func)()) {
     keyStates[key] = isPressed;
 }
 
+// A function to execute another function once when the mouse button is pressed and held down
+void mouse_press_once(GLFWwindow* window, int button, void(*func)(GLFWwindow* window)) {
+    bool isPressed = glfwGetMouseButton(window, button) == GLFW_PRESS;
+
+    // Initialize mouse button state if not already present
+    if (mouseButtonStates.find(button) == mouseButtonStates.end()) {
+        mouseButtonStates[button] = false;
+    }
+
+    // Check if the button was not pressed previously but is pressed now
+    if (isPressed && !mouseButtonStates[button]) {
+        func(window);
+    }
+
+    // Update the previous button state
+    mouseButtonStates[button] = isPressed;
+}
+
 // Mouse callback function
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     if (!scene.activeCamera) return;
@@ -83,6 +103,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         lastX = xpos;
         lastY = ypos;
     }
+
+
 }
 
 
@@ -107,6 +129,8 @@ void toggleWireFrames() {
 
 void handleConsoleInput(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (!Console::getInstance().isVisible()) return;
+
+
 
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         if (key == GLFW_KEY_BACKSPACE) {
@@ -160,6 +184,37 @@ void processInput(GLFWwindow* window) {
         return;
     }*/
 
+   
+    // Handle selection with mouse click (using lambda function)
+    mouse_press_once(window, GLFW_MOUSE_BUTTON_LEFT, [](GLFWwindow* w) {
+        // Get window size for selection system
+        int width, height;
+        glfwGetWindowSize(w, &width, &height);
+
+        double xpos, ypos;
+        glfwGetCursorPos(w, &xpos, &ypos);
+
+        // Check if CTRL is pressed for additive selection
+        bool isControlPressed = glfwGetKey(w, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
+
+        if (scene.activeCamera) {
+            // Set the camera in SelectionSystem
+            SelectionSystem::getInstance().setCamera(scene.activeCamera);
+
+            try {
+                SelectionSystem::getInstance().handleSelection(
+                    xpos, ypos,
+                    width, height,
+                    scene,
+                    isControlPressed
+                );
+            }
+            catch (const std::runtime_error& e) {
+                std::cerr << "Selection error: " << e.what() << std::endl;
+            }
+        }
+        });
+
 
     // Call press_once for the spacebar key
     // Use a simple lambda to wrap the camera.toggleCam call
@@ -187,10 +242,12 @@ void processInput(GLFWwindow* window) {
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
             scene.activeCamera->setCameraPos(scene.activeCamera->cameraPos + scene.activeCamera->cameraSpeed * glm::normalize(glm::cross(scene.activeCamera->cameraFront, scene.activeCamera->cameraUp)));
         }
+
         // Additional processing for mouse
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
         mouse_callback(window, xpos, ypos);
+
     }
 
 

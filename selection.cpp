@@ -12,13 +12,22 @@ SelectionSystem& SelectionSystem::getInstance() {
 }
 
 Ray SelectionSystem::screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight,
-    const glm::mat4& projection, const glm::mat4& view) {
+    Scene& scene) {
+
+    // First check if we have a valid camera
+    if (!camera) {
+        throw std::runtime_error("Camera not set in SelectionSystem");
+    }
+    glm::mat4 projection = scene.activeCamera->getProjectionMatrix();
+    glm::mat4 view = scene.activeCamera->getViewMatrix();
+
     // Convert to normalized device coordinates
     float x = (2.0f * mouseX) / screenWidth - 1.0f;
-    float y = 1.0f - (2.0f * mouseY) / screenHeight;
+    float y = 1.0f - (2.0f * mouseY) / screenHeight;  // Flip Y coordinate
 
     // Create ray in clip space
     glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
+
 
     // Convert to eye space
     glm::vec4 rayEye = glm::inverse(projection) * rayClip;
@@ -28,7 +37,11 @@ Ray SelectionSystem::screenToWorldRay(double mouseX, double mouseY, int screenWi
     glm::vec4 rayWorld = glm::inverse(view) * rayEye;
     glm::vec3 rayDirection = glm::normalize(glm::vec3(rayWorld));
 
-    return Ray(camera->cameraPos, rayDirection);
+    //debug dray ray
+    Ray ray = Ray(camera->cameraPos, rayDirection);
+    drawRay(ray, 10.0f, scene);
+
+    return ray;
 }
 
 bool SelectionSystem::triangleIntersection(const Ray& ray, const glm::vec3& v0, const glm::vec3& v1,
@@ -95,9 +108,9 @@ SelectionSystem::IntersectionResult SelectionSystem::rayIntersectMesh(
     return rayMeshIntersection(localRay, node->mesh);
 }
 
-bool SelectionSystem::handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
-    const glm::mat4& projection, const glm::mat4& view, Scene& scene) {
-    Ray ray = screenToWorldRay(mouseX, mouseY, screenWidth, screenHeight, projection, view);
+bool SelectionSystem::handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight, Scene& scene, bool additive) {
+
+    Ray ray = screenToWorldRay(mouseX, mouseY, screenWidth, screenHeight, scene);
     float closestDistance = std::numeric_limits<float>::max();
     std::shared_ptr<Node> closestNode = nullptr;
 
@@ -109,6 +122,61 @@ bool SelectionSystem::handleSelection(double mouseX, double mouseY, int screenWi
         }
     }
 
-    selectedNode = closestNode;
-    return selectedNode != nullptr;
+    // Handle selection based on additive flag
+    if (!additive) {
+        scene.clearSelection();
+    }
+
+    if (closestNode) {
+        // If clicking an already selected node in additive mode, deselect it
+        if (additive && scene.isNodeSelected(closestNode)) {
+            scene.removeSelectedNode(closestNode);
+        }
+        else {
+            scene.addSelectedNode(closestNode);
+        }
+    }
+
+    return !scene.selectedNodes.empty();
+}
+
+void SelectionSystem::drawRay(Ray ray, float length, Scene& scene) {
+    std::cout << "\n --- Drawing Ray --- \n";
+    // Save current shader program
+    GLint currentProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+
+    // Disable the main shader and switch to a basic shader for lines
+    glUseProgram(0);
+
+    // Save current polygon mode
+    GLint previousPolygonMode[2];
+    glGetIntegerv(GL_POLYGON_MODE, previousPolygonMode);
+
+    // Enable wireframe mode to call each drawWireframe
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    // Set up matrices in fixed-function pipeline
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixf(glm::value_ptr(scene.activeCamera->getProjectionMatrix()));
+    glMatrixMode(GL_MODELVIEW);
+    glLoadMatrixf(glm::value_ptr(scene.activeCamera->getViewMatrix()));
+
+    glLineWidth(1.0f);  // Set line width
+
+    glm::vec3 start = ray.origin;
+    glm::vec3 end = start + ray.direction * length;
+
+    glBegin(GL_LINES);
+    glColor3f(1.0f, 0.0f, 0.0f);  // Red ray
+    glVertex3f(start.x, start.y, start.z);
+    glVertex3f(end.x, end.y, end.z);
+    glEnd();
+
+    // Restore original states
+    glPolygonMode(GL_FRONT, previousPolygonMode[0]);
+    glPolygonMode(GL_BACK, previousPolygonMode[1]);
+
+    // Restore previous shader program
+    glUseProgram(currentProgram);
 }

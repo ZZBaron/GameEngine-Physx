@@ -104,7 +104,7 @@ add_executable(GameEnginePhysx
     ${ENGINE_HEADERS}
     ${IMGUI_SOURCES}
     ${IMGUIFILEDIALOG_SOURCES}
-  "shadowRenderer.h"   "primitveNodes.h" "scene.h"   "textureManager.h" "modelImporter.h" "Nodes/tube.h" "curveParameterization.h" "fileDialog.h" "background.h" "Nodes/bin.h" "player.h" "surfaceParameterization.h" "object2D.h" "renderer2D.h" "scene2D.h" "camera2D.h" "PhysXBody2D.h" "UVviewer.h")
+  "shadowRenderer.h"   "primitveNodes.h" "scene.h"   "textureManager.h" "modelImporter.h" "Nodes/tube.h" "curveParameterization.h" "fileDialog.h" "background.h" "Nodes/bin.h" "player.h" "surfaceParameterization.h" "object2D.h" "renderer2D.h" "scene2D.h" "camera2D.h" "PhysXBody2D.h" "UVviewer.h"  "sky.h")
 
 
 

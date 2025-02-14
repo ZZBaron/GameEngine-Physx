@@ -823,8 +823,6 @@ public:
     glm::vec3 getWorldPosition() const {
         return glm::vec3(worldTransform[3]);
     }
-    
-
 
 };
 

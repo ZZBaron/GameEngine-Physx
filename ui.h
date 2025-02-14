@@ -30,7 +30,6 @@ void cleanupImGui();
 // forward declerations
 // class Scene;
 extern Scene scene; // Declare the external scene variable that appears in GameEngine.cpp
-extern std::shared_ptr<Node> selectedNode; // Selected node pointer
 
 
 class MenuSystem {
@@ -136,7 +135,7 @@ public:
 
 
                     if (ImGui::TreeNode("Objects")) {
-                        static std::shared_ptr<Node> selectedNode = nullptr;
+                        static std::shared_ptr<Node> selectedNode = scene.selectedNodes[0]; // choose first to display
                         static bool showCreateWindow = false;
                         static bool showFileDialog = false;
                         static glm::vec3 importPosition(0.0f);

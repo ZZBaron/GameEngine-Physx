@@ -354,6 +354,7 @@ private:
 
         // Check if the scene has animations
         if (scene->HasAnimations()) {
+            std::cout << "\n --- Scene hasAnimations = true \n";
             auto animatedMesh = std::make_shared<AnimatedMesh>();
 
             // Process bone data if present

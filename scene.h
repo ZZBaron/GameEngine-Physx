@@ -9,6 +9,7 @@
 #include "vender/imgui/imgui.h"
 #include "vender/imgui/backends/imgui_impl_glfw.h"
 #include "vender/imgui/backends/imgui_impl_opengl3.h"
+#include "background.h"
 
 
 class Scene {
@@ -21,34 +22,40 @@ public:
     int screenHeight = 1008;
 
 
-	// Camera management
-	std::shared_ptr<Camera> activeCamera;
-	std::vector<std::shared_ptr<Camera>> cameras;
+    // Camera management
+    std::shared_ptr<Camera> activeCamera;
+    std::vector<std::shared_ptr<Camera>> cameras;
+
+    //background
+    std::shared_ptr<Skybox> skybox;
 
 
     // object nodes
-	// scene should control which nodes are drawn on camera (view frustum culling)
-	// but these are all the nodes in the scene including the culled ones and the ones in physicsWorld
-	std::vector<std::shared_ptr<Node>> sceneNodes;
-	std::unordered_map<std::string, std::shared_ptr<Node>> nodeRegistry;
+    // scene should control which nodes are drawn on camera (view frustum culling)
+    // but these are all the nodes in the scene including the culled ones and the ones in physicsWorld
+    std::vector<std::shared_ptr<Node>> sceneNodes;
+    std::unordered_map<std::string, std::shared_ptr<Node>> nodeRegistry;
+
+    //which nodes are selected
+    std::vector<std::shared_ptr<Node>> selectedNodes;
 
 
-	// physics world
-	PhysXWorld physicsWorld;
+    // physics world
+    PhysXWorld physicsWorld;
 
     // phyiscs params
     bool play = false; // play sim/animation
     bool gravityEnabled = true; // enable gravity
     bool collisionEnabled = true; // enable collision detection
 
-	ShadowRenderer shadowRenderer;
+    ShadowRenderer shadowRenderer;
 
     //draw flags
     bool drawWireframes = false;
     bool drawObjects = true;
     bool drawControlsoverlay = true;
 
-	glm::vec3 ambientLight;
+    glm::vec3 ambientLight;
     std::vector<std::shared_ptr<SpotLight>> spotLights;
     std::vector<std::shared_ptr<SunLight >> sunLights;
 
@@ -63,11 +70,19 @@ public:
     // Animation system (for controlling all the animations playing in scene)
     AnimationSystem animationSystem;
 
-	Scene() : ambientLight(0.1f, 0.1f, 0.1f) {
-		// Create and set up default camera
-		auto defaultCamera = std::make_shared<Camera>("Default");
-		cameras.push_back(defaultCamera);
-		activeCamera = defaultCamera;
+    Scene() : ambientLight(0.1f, 0.1f, 0.1f) {
+
+        // Initialize the background member
+        skybox = std::make_shared<Skybox>();
+
+        //configure default background
+        //background->setColor(glm::vec3(0.2f, 0.3f, 0.3f));
+
+
+        // Create and set up default camera
+        auto defaultCamera = std::make_shared<Camera>("Default");
+        cameras.push_back(defaultCamera);
+        activeCamera = defaultCamera;
 
         auto defaultLight = std::make_shared<SpotLight>();
         defaultLight->name = "defaultLight";
@@ -84,9 +99,35 @@ public:
         light2->innerCutoff = glm::cos(glm::radians(25.0f));    // Inner angle of 25 degrees
         light2->outerCutoff = glm::cos(glm::radians(35.0f));    // Outer angle of 35 degrees
         addSpotLight(light2);
-	}
+    }
 
+    void setup() {
+        //setup background
+        skybox->setup();
 
+        // Load cubemap textures
+        std::vector<std::string> faces{
+            getProjectRoot() + "/textures/nz.png", //right
+            getProjectRoot() + "/textures/pz.png", //left
+            getProjectRoot() + "/textures/py.png", //top
+            getProjectRoot() + "/textures/ny.png", //bottom
+            getProjectRoot() + "/textures/px.png", //front
+            getProjectRoot() + "/textures/nx.png" //back
+        };
+
+        skybox->loadCubemap(faces);
+
+        glClearColor(0.0f,  0.0f, 0.0f, 0.0f);
+        glEnable(GL_DEPTH_TEST);
+        glShadeModel(GL_SMOOTH);
+
+        // Initialize shadow rendering
+        shadowRenderer.initialize();
+
+        // uvViewer.initialize();
+
+        //new frame imgui??
+    }
 
     // Node Management
     void addNode(std::shared_ptr<Node> node, const std::string& name = "") {
@@ -180,6 +221,7 @@ public:
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
         // Separate opaque and transparent objects
         std::vector<std::shared_ptr<Node>> opaqueNodes;
         std::vector<std::shared_ptr<Node>> transparentNodes;
@@ -252,7 +294,12 @@ public:
             //drawControlsOverlay();
         }
 
-
+        // Render skybox last for better performance
+        if (skybox) {
+            glDepthFunc(GL_LEQUAL);
+            skybox->render(view, projection);
+            glDepthFunc(GL_LESS);
+        }
 
         glUseProgram(shadowRenderer.getMainShaderProgram());
     }
@@ -404,6 +451,29 @@ public:
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+
+    // selections
+    // Add these new methods
+    void addSelectedNode(std::shared_ptr<Node> node) {
+        if (node && std::find(selectedNodes.begin(), selectedNodes.end(), node) == selectedNodes.end()) {
+            selectedNodes.push_back(node);
+        }
+    }
+
+    void clearSelection() {
+        selectedNodes.clear();
+    }
+
+    void removeSelectedNode(std::shared_ptr<Node> node) {
+        auto it = std::find(selectedNodes.begin(), selectedNodes.end(), node);
+        if (it != selectedNodes.end()) {
+            selectedNodes.erase(it);
+        }
+    }
+
+    bool isNodeSelected(std::shared_ptr<Node> node) const {
+        return std::find(selectedNodes.begin(), selectedNodes.end(), node) != selectedNodes.end();
     }
 
 };

@@ -5,10 +5,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-struct vec3d
-{
-    float x, y, z;
-};
 
 GLuint loadShader(const char* path, GLenum shaderType) {
     std::ifstream shaderFile(path);
@@ -65,8 +61,6 @@ GLuint createShaderProgram(const char* vertexPath, const char* fragmentPath) {
 
     return shaderProgram;
 }
-
-
 
 void drawAxes(const glm::mat4& view, const glm::mat4& projection) {
     // Set line width for better visibility

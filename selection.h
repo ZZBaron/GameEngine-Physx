@@ -23,13 +23,17 @@ private:
 
 public:
     static SelectionSystem& getInstance();
+
+    void setCamera(std::shared_ptr<Camera> cam) { camera = cam; }
+
     std::shared_ptr<Node> getSelectedNode() const { return selectedNode; }
 
     Ray screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight,
-        const glm::mat4& projection, const glm::mat4& view);
+        Scene& scene);
 
-    bool handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight,
-        const glm::mat4& projection, const glm::mat4& view, Scene& scene);
+    bool handleSelection(double mouseX, double mouseY, int screenWidth, int screenHeight, Scene& scene, bool additive);
+
+    void drawRay(Ray ray, float length, Scene& scene);
 
 private:
     SelectionSystem() : selectedNode(nullptr) {}

@@ -4,6 +4,135 @@
 #include "shader.h"
 #include "misc_funcs.h"
 #include "textureManager.h"
+#include "paths.h"
+
+class Skybox {
+private:
+    unsigned int skyboxVAO, skyboxVBO;
+    unsigned int cubemapTexture;
+    std::shared_ptr<Shader> skyboxShader;
+
+    // Skybox vertices - a cube centered at origin
+    float skyboxVertices[108] = {
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
+public:
+    void setup() {
+        // Create and compile shaders
+        skyboxShader = std::make_shared<Shader>(Paths::Shaders::skyboxVertexShader.c_str(), Paths::Shaders::skyboxFragmentShader.c_str());
+
+        // Create VAO and VBO
+        glGenVertexArrays(1, &skyboxVAO);
+        glGenBuffers(1, &skyboxVBO);
+
+        glBindVertexArray(skyboxVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    }
+
+    unsigned int loadCubemap(const std::vector<std::string>& faces) {
+        unsigned int textureID;
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+        int width, height, nrChannels;
+        for (unsigned int i = 0; i < faces.size(); i++) {
+            unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+            if (data) {
+                GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                    0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+                stbi_image_free(data);
+            }
+            else {
+                std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+                stbi_image_free(data);
+            }
+        }
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+        cubemapTexture = textureID;
+        return textureID;
+    }
+
+    void render(const glm::mat4& view, const glm::mat4& projection) {
+        // Change depth function and disable depth writing
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
+
+        skyboxShader->use();
+
+        // Remove translation from view matrix
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
+
+        skyboxShader->setMat4("view", skyboxView);
+        skyboxShader->setMat4("projection", projection);
+
+        // Bind cubemap texture
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // Reset depth settings
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+    }
+
+    ~Skybox() {
+        glDeleteVertexArrays(1, &skyboxVAO);
+        glDeleteBuffers(1, &skyboxVBO);
+    }
+};
 
 enum class BackgroundType {
     Color,
@@ -15,11 +144,32 @@ enum class BackgroundType {
 class Background {
 private:
     GLuint shaderProgram;
-    GLuint VAO, VBO;
     BackgroundType type;
     glm::vec3 backgroundColor;
     float strength;
     GLuint textureID;
+
+   
+
+    void initializeShader() {
+        // Load and compile background shader
+        std::string vertexShaderPath = Paths::Shaders::backgroundVertexShader;
+        std::string fragmentShaderPath = Paths::Shaders::backgroundFragmentShader;
+
+
+        Shader shader(vertexShaderPath.c_str(), fragmentShaderPath.c_str());
+        shaderProgram = shader.getShaderProgram();
+    }
+
+public:
+    GLuint VAO, VBO; //public so they can be used for rendering in subclasses like SkyBackground
+
+    Background() :
+        type(BackgroundType::Color),
+        backgroundColor(0.0f),
+        strength(1.0f),
+        textureID(0) {
+    }
 
     void setupQuad() {
         // Create a quad that fills the screen in NDC
@@ -48,24 +198,10 @@ private:
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     }
 
-    void initializeShader() {
-        // Load and compile background shader
-        std::string vertexShaderPath = getProjectRoot() + "/shaders/background_vertex.glsl";
-        std::string fragmentShaderPath = getProjectRoot() + "/shaders/background_fragment.glsl";
-
-        Shader shader(vertexShaderPath.c_str(), fragmentShaderPath.c_str());
-        shaderProgram = shader.getShaderProgram();
-    }
-
-public:
-    Background() :
-        type(BackgroundType::Color),
-        backgroundColor(0.0f),
-        strength(1.0f),
-        textureID(0) {
-        initializeShader();
-        setupQuad();
-    }
+    virtual void setup() {
+		initializeShader();
+		setupQuad();
+	}
 
     void setColor(const glm::vec3& color) {
         type = BackgroundType::Color;
@@ -82,16 +218,17 @@ public:
         textureID = TextureManager::getInstance().LoadTexture(path, "environment");
     }
 
-    void setSkyTexture(const std::string& path) {
-        type = BackgroundType::SkyTexture;
-        textureID = TextureManager::getInstance().LoadTexture(path, "sky");
-    }
+    void setType(BackgroundType backgroundType) {
+		type = backgroundType;
+	}
 
     void setStrength(float value) {
         strength = glm::max(0.0f, value);
     }
 
-    void render(const glm::mat4& view, const glm::mat4& projection) {
+    virtual void render(const glm::mat4& view, const glm::mat4& projection) {
+        std::cout << "\n --- Rendering background --- \n";
+
         glDepthFunc(GL_LEQUAL);
         glUseProgram(shaderProgram);
 
