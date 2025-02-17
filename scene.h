@@ -57,10 +57,10 @@ public:
 
     glm::vec3 ambientLight;
     std::vector<std::shared_ptr<SpotLight>> spotLights;
-    std::vector<std::shared_ptr<SunLight >> sunLights;
+    std::vector<std::shared_ptr<SunLight>> sunLights;
 
     // for first person player mode
-    Player player;
+    std::shared_ptr<Player> player;
     bool playerMode = false;
 
     // for mapping uv's
@@ -81,7 +81,7 @@ public:
 
         // Create and set up default camera
         auto defaultCamera = std::make_shared<Camera>("Default");
-        cameras.push_back(defaultCamera);
+        addCamera(defaultCamera);
         activeCamera = defaultCamera;
 
         auto defaultLight = std::make_shared<SpotLight>();
@@ -99,6 +99,7 @@ public:
         light2->innerCutoff = glm::cos(glm::radians(25.0f));    // Inner angle of 25 degrees
         light2->outerCutoff = glm::cos(glm::radians(35.0f));    // Outer angle of 35 degrees
         addSpotLight(light2);
+
     }
 
     void setup() {
@@ -195,6 +196,17 @@ public:
         addNode(sunLight); // for light visualizer (sphere)
 
     }
+
+    void addPlayer(std::shared_ptr<Player> player) {
+		this->player = player;
+
+        addCamera(player->camera);
+
+        if (player->playerModel) {
+			addNode(player->playerModel);
+		}
+
+	}
 
     // Scene Update and Rendering
     void update(float deltaTime) {
@@ -415,7 +427,7 @@ public:
         playerMode = !playerMode;
         
         if (playerMode) {
-            activeCamera = player.camera;
+            activeCamera = player->camera;
         }
         else {
             //default camera

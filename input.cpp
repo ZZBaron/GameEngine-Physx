@@ -222,7 +222,11 @@ void processInput(GLFWwindow* window) {
         if (scene.activeCamera) scene.activeCamera->toggleCam(w);
         });
 
-    press_once_noargs(window, GLFW_KEY_P, toggleMenu);
+    press_once(window, GLFW_KEY_P, [](GLFWwindow* w) {
+        scene.togglePlayer();
+        });
+
+    press_once_noargs(window, GLFW_KEY_ESCAPE, toggleMenu);
     press_once_noargs(window, GLFW_KEY_L, togglePlay);
     press_once_noargs(window, GLFW_KEY_GRAVE_ACCENT, toggleConsole);
 	press_once_noargs(window, GLFW_KEY_G, toggleGenSpheres);

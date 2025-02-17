@@ -25,6 +25,7 @@
 #include "surfaceParameterization.h"
 
 
+
 // Specify shader paths
 
 std::string textVertex_shaderPATH_string = getProjectRoot() + "/text_vertex_shader.glsl";
@@ -67,9 +68,16 @@ bool trackLight = false; // Make camera same as light view
 std::shared_ptr<Node> selectedNode = nullptr; // Initialize selected Node pointer
 
 Scene scene;
+//Create importer
+ModelImporter importer;
 
 void setupScene() {
     scene.setup();
+
+    
+    auto playerModel = importer.importGLB(getProjectRoot() + "/blender/Base Character.glb");
+    std::shared_ptr<Player> player = std::make_shared<Player>(playerModel);
+    scene.addPlayer(player);
 
 
     debugDepthShaderProgram = initDebugDepthShader(); // for rendering depth map to quad
@@ -93,6 +101,8 @@ void setupScene() {
 
 
 int main() {
+
+    std::cout << "Running GameEngine main()" << std::endl;
 
     std::cout << "GLM Version: "
         << GLM_VERSION_MAJOR << "."
@@ -171,30 +181,7 @@ int main() {
     // test blender import
     // Import a model with textures
 
-    std::string modelPath = getProjectRoot() + "/blender/simple room33.glb";
-
-    ModelImporter importer;
     bool showUVs = false;
-
-    auto model = importer.importGLB(modelPath);
-    if (model) {
-        //model->localScale = glm::vec3(0.01f, 0.01f, 0.01f);
-        //model->updateWorldTransform();
-        // for (const auto& child : model->children) {
-        //     child->mesh->flipNormals();
-        // }
-        scene.addNode(model);
-
-
-
-        // for viewing uv's
-        //scene.uvViewer.setupMeshUVs(model->mesh);
-
-        showUVs = false;
-    }
-    else {
-        std::cout << "Import failed: " << importer.getLastError() << std::endl;
-    }
 
     // auto aniModel = importer.importGLB(getProjectRoot() + "/blender/test ani.glb");
     // if (aniModel) {
@@ -335,6 +322,8 @@ int main() {
 
     float shapeGenerationInterval = 0.1f;  // Generate spheres every _ seconds
     float timeSinceLastGeneration = 0.0f;
+
+
 
 
     // Main loop

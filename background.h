@@ -6,11 +6,20 @@
 #include "textureManager.h"
 #include "paths.h"
 
+enum class SkyBoxType {
+	Color,
+	Texture
+};
+
+// skybox uses cubemap
 class Skybox {
 private:
     unsigned int skyboxVAO, skyboxVBO;
     unsigned int cubemapTexture;
     std::shared_ptr<Shader> skyboxShader;
+
+    SkyBoxType type = SkyBoxType::Color;
+    bool isEnvironmentMap = false;
 
     // Skybox vertices - a cube centered at origin
     float skyboxVertices[108] = {
@@ -135,11 +144,15 @@ public:
     }
 };
 
+class SkySphere {
+
+};
+
+
+// Background class just uses one fixed image or color (not a cubemap)
 enum class BackgroundType {
     Color,
-    ImageTexture,
-    EnvironmentTexture,
-    SkyTexture
+    Texture
 };
 
 class Background {
@@ -210,13 +223,8 @@ public:
     }
 
     void setImageTexture(const std::string& path) {
-        type = BackgroundType::ImageTexture;
+        type = BackgroundType::Texture;
         textureID = TextureManager::getInstance().LoadTexture(path, "background");
-    }
-
-    void setEnvironmentTexture(const std::string& path) {
-        type = BackgroundType::EnvironmentTexture;
-        textureID = TextureManager::getInstance().LoadTexture(path, "environment");
     }
 
     void setType(BackgroundType backgroundType) {

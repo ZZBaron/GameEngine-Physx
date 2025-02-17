@@ -251,7 +251,7 @@ float calcSpotLightShadow(sampler2D shadowMap, vec4 fragPosLightSpace) {
     return shadow;
 }
 
-vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, int lightIndex, vec3 albedo) {
+vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, int lightIndex, vec3 albedo, float roughness) {
     vec3 lightDir = normalize(light.position - fragPos);
 
     // Spot light cone calculation
@@ -283,13 +283,13 @@ vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, int
     vec3 F0 = mix(vec3(0.04), albedo, material.metallic);
 
     // Standard PBR terms
-    float D = D_GGX(NoH, material.roughness);
-    vec3 F = F_Schlick(VoH, F0, material.roughness);
-    float G = G_Smith(NoV, NoL, material.roughness);
+    float D = D_GGX(NoH, roughness);
+    vec3 F = F_Schlick(VoH, F0, roughness);
+    float G = G_Smith(NoV, NoL, roughness);
     vec3 specular = (D * F * G) / max(4.0 * NoV * NoL, EPSILON);
 
     // Diffuse term with subsurface scattering
-    vec3 diffuse = DisneyDiffuse(albedo, material.roughness, NoV, NoL, VoH, material.metallic);
+    vec3 diffuse = DisneyDiffuse(albedo, roughness, NoV, NoL, VoH, material.metallic);
     if (material.subsurface > 0.0) {
         vec3 subsurfaceColor = SubsurfaceScattering(lightDir, viewDir, normal,
             albedo, material.subsurface,
@@ -299,7 +299,7 @@ vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, int
 
     // Sheen term
     vec3 sheenColor = mix(vec3(1.0), albedo, material.sheenTint);
-    float sheenDistribution = D_Charlie(material.roughness, NoH);
+    float sheenDistribution = D_Charlie(roughness, NoH);
     vec3 sheenSpecular = material.sheen * sheenColor * sheenDistribution;
 
     // Clearcoat term
@@ -341,14 +341,14 @@ void main() {
         albedo = material.baseColor;
     }
 
-    // Normal mapping
+    // FIRST establish the surface basis vectors
     vec3 N = normalize(Normal);
     vec3 T = normalize(Tangent);
     vec3 B = normalize(cross(N, T));
     mat3 TBN = mat3(T, B, N);
     vec3 V = normalize(viewPos - FragPos);
 
-    // Sample normal map with projection
+    // THEN sample and apply normal map if it exists
     if (material.hasNormalMap) {
         vec2 normalUV = getProjectedUV(TexCoord, material.normalProjection, FragPos, Normal);
         normalUV = (normalUV * material.normalTiling) + material.normalOffset;
@@ -357,27 +357,36 @@ void main() {
     }
 
     // Sample metallic with projection
-    float metallic = material.metallic;
+    float metallic = 1.0;
     if (material.hasMetallicMap) {
         vec2 metallicUV = getProjectedUV(TexCoord, material.metallicProjection, FragPos, Normal);
         metallicUV = (metallicUV * material.metallicTiling) + material.metallicOffset;
         metallic *= texture(material.metallicMap, metallicUV).r;
     }
+    else {
+        metallic = material.metallic;
+    }
 
     // Sample roughness with projection
-    float roughness = material.roughness;
+    float roughness = 1.0;
     if (material.hasRoughnessMap) {
         vec2 roughnessUV = getProjectedUV(TexCoord, material.roughnessProjection, FragPos, Normal);
         roughnessUV = (roughnessUV * material.roughnessTiling) + material.roughnessOffset;
         roughness *= texture(material.roughnessMap, roughnessUV).r;
     }
+    else {
+		roughness = material.roughness;
+	}
 
     // Sample emission with projection
-    vec3 emission = material.emission;
+    vec3 emission = vec3(1.0);
     if (material.hasEmissionMap) {
         vec2 emissionUV = getProjectedUV(TexCoord, material.emissionProjection, FragPos, Normal);
         emissionUV = (emissionUV * material.emissionTiling) + material.emissionOffset;
         emission *= texture(material.emissionMap, emissionUV).rgb;
+    }
+    else {
+        emission = material.emission;
     }
 
     // Sample occlusion with projection
@@ -400,7 +409,7 @@ void main() {
     // Accumulate light from all spot lights
     vec3 lighting = vec3(0.0);
     for (int i = 0; i < numActiveSpotLights && i < MAX_SPOT_LIGHTS; ++i) {
-        lighting += calcSpotLight(spotLights[i], N, FragPos, V, i, albedo);
+        lighting += calcSpotLight(spotLights[i], N, FragPos, V, i, albedo, roughness);
     }
 
     // Combine all lighting components
@@ -408,15 +417,8 @@ void main() {
     vec3 color = ambient + lighting;
 
 
-
-    // Add emission
-    if (material.hasEmissionMap) {
-        vec2 emissionUV = (TexCoord * material.emissionTiling) + material.emissionOffset;
-        color += material.emission * material.emissionStrength * texture(material.emissionMap, emissionUV).rgb;
-    }
-    else {
-        color += material.emission * material.emissionStrength;
-    }
+    // add emission
+    color += emission * material.emissionStrength;
 
 
     // Tone mapping (ACES approximation)

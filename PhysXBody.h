@@ -18,6 +18,13 @@ struct BoundingSphere {
     float boundingSphereRadius; // only updated as actual mesh changes
 };
 
+enum class GeometryType {
+    Sphere,
+    Box,
+    Capsule,
+    Mesh
+};
+
 class PhysXBody {
 public:
     PxRigidActor* actor;
@@ -29,11 +36,18 @@ public:
     // bounding sphere for broad phase collisions
     BoundingSphere boundingSphere;
 
+    //default constructor
+    PhysXBody() : actor(nullptr), node(nullptr), isStatic(false) {}
 
-    PhysXBody(std::shared_ptr<Node> nodePtr, bool staticBody = false)
+
+    PhysXBody(std::shared_ptr<Node> nodePtr, bool staticBody = false, bool useMesh=true)
         : node(nodePtr), isStatic(staticBody) {
-        node->updateWorldTransform();  // Add this line
-        createActor();
+        // node->updateWorldTransform();  
+
+        if (useMesh) {
+            createGeometryFromMesh();
+            createActor();
+		}
         updateBoundingSphere();
     }
 
@@ -44,13 +58,23 @@ public:
         createCompoundActor();
     }
 
+    void createSphereGeometry(float radius) {
+		geometry = std::make_shared<PxSphereGeometry>(radius);
+	}
+
+    void createBoxGeometry(float width, float height, float depth) {
+        geometry = std::make_shared<PxBoxGeometry>(width * 0.5f, height * 0.5f, depth * 0.5f);
+    }
+
+    void createCapsuleGeometry(float radius, float halfHeight) {
+		geometry = std::make_shared<PxCapsuleGeometry>(radius, halfHeight);
+	}
 
     void createActor() {
 
         PxPhysics* physics = PhysXManager::getInstance().getPhysics();
-
-        // Create geometry based on mesh type
-        PxGeometry* geometry = createGeometryFromMesh();
+        
+        // geometry should be defined before creating the actor
         if (!geometry) return;
 
         // Create transform from node's world transform
@@ -95,7 +119,6 @@ public:
 
         PhysXManager::getInstance().getScene()->addActor(*actor);
 
-        delete geometry;
     }
 
     void createCompoundActor() {
@@ -160,11 +183,53 @@ public:
 
     }
 
+    void createGeometryFromMesh() {
+
+        if (!node->mesh) {
+            geometry = nullptr;
+            return;
+        }
+
+        switch (node->type) {
+        case NodeType::Sphere: {
+            auto sphereNode = static_cast<SphereNode*>(node.get());
+            geometry = std::make_shared<PxSphereGeometry>(sphereNode->radius);
+            return;
+        }
+
+        case NodeType::Box: {
+            auto boxNode = static_cast<BoxNode*>(node.get());
+            geometry = std::make_shared<PxBoxGeometry>(
+                boxNode->width * 0.5f,
+                boxNode->height * 0.5f,
+                boxNode->depth * 0.5f
+            );
+
+            return;
+        }
+
+        case NodeType::Default:
+        default: {
+            if (node->mesh) {
+                // Fall back to computing bounding box for unknown types
+                glm::vec3 halfExtents = computeBoxHalfExtents(node->mesh.get());
+                geometry = std::make_shared<PxBoxGeometry>(halfExtents.x, halfExtents.y, halfExtents.z);
+                return;
+            }
+
+            return;
+        }
+        }
+    }
+
    
+
 
     // Physics-related methods from the original PhysXBody
     PxRigidActor* getActor() { return actor; }
     std::shared_ptr<Node> getNode() const { return node; }
+
+    std::shared_ptr<PxGeometry> getGeometry() const { return geometry; }
 
     glm::vec3 getPosition() {
         if (!actor) return glm::vec3(0.0f);
@@ -240,37 +305,11 @@ public:
         }
         return glm::mat3(0.0f);
     }
+    
 
 private:
-    PxGeometry* createGeometryFromMesh() {
-        if (!node->mesh) return nullptr;
+    std::shared_ptr<PxGeometry> geometry;
 
-        switch (node->type) {
-            case NodeType::Sphere: {
-                auto sphereNode = static_cast<SphereNode*>(node.get());
-                return new PxSphereGeometry(sphereNode->radius);
-            }
-
-            case NodeType::Box: {
-                auto boxNode = static_cast<BoxNode*>(node.get());
-                return new PxBoxGeometry(
-                    boxNode->width * 0.5f,
-                    boxNode->height * 0.5f,
-                    boxNode->depth * 0.5f
-                );
-            }
-
-            case NodeType::Default:
-            default: {
-                if (node->mesh) {
-                    // Fall back to computing bounding box for unknown types
-                    glm::vec3 halfExtents = computeBoxHalfExtents(node->mesh.get());
-                    return new PxBoxGeometry(halfExtents.x, halfExtents.y, halfExtents.z);
-                }
-                return nullptr;
-            }
-        }
-    }
 
     void attachNodeShape(Node* node, PxMaterial* material) {
         if (!node) return;

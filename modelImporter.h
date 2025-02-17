@@ -11,7 +11,7 @@
 class ModelImporter {
 private:
     Assimp::Importer importer;
-    std::string lastError;
+    std::string lastError; 
     std::string modelDirectory;
 
     // Helper struct for texture mapping
@@ -145,6 +145,17 @@ private:
         std::cout << "\n=== Processing Material ===" << std::endl;
         std::cout << "Material name: " << material->GetName().C_Str() << std::endl;
 
+        // Debug code to print all material properties
+        aiString name;
+        material->Get(AI_MATKEY_NAME, name);
+        std::cout << "Material name: " << name.C_Str() << std::endl;
+
+        for (unsigned int i = 0; i < material->mNumProperties; ++i) {
+            aiMaterialProperty* prop = material->mProperties[i];
+            std::cout << "Property: " << prop->mKey.C_Str() << std::endl;
+        }
+
+
         auto newMaterial = std::make_shared<Material>();
 
         // Process base color
@@ -161,40 +172,47 @@ private:
         // Process PBR properties
         float metallicFactor = 0.0f;
         if (material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor) == AI_SUCCESS) {
+            std::cout << "Found metallic factor via AI_MATKEY_METALLIC_FACTOR" << std::endl;
             newMaterial->metallic = metallicFactor;
         }
 
         float roughnessFactor = 0.5f;
         if (material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor) == AI_SUCCESS) {
+            std::cout << "Found roughness factor via AI_MATKEY_ROUGHNESS_FACTOR" << std::endl;
             newMaterial->roughness = roughnessFactor;
         }
 
         // Process transmission
         float transmission = 0.0f;
         if (material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmission) == AI_SUCCESS) {
+            std::cout << "Found transmission factor via AI_MATKEY_TRANSMISSION_FACTOR" << std::endl;
             newMaterial->transmission = transmission;
         }
 
-        // Process alpha/transparency
+        // Process alpha/transparency 
         float opacity = 1.0f;
         if (material->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
+            std::cout << "Found opacity via AI_MATKEY_OPACITY" << std::endl;
             newMaterial->alpha = opacity;
         }
 
         // Process emission
         aiColor3D emission(0.0f);
         if (material->Get(AI_MATKEY_COLOR_EMISSIVE, emission) == AI_SUCCESS) {
+            std::cout << "Found emission color via AI_MATKEY_COLOR_EMISSIVE" << std::endl;
             newMaterial->emission = glm::vec3(emission.r, emission.g, emission.b);
         }
 
-        float emissionStrength = 1.0f;
+        float emissionStrength = 0.0f;
         if (material->Get(AI_MATKEY_EMISSIVE_INTENSITY, emissionStrength) == AI_SUCCESS) {
+            std::cout << "Found emissive intensity via AI_MATKEY_EMISSIVE_INTENSITY" << std::endl;
             newMaterial->emissionStrength = emissionStrength;
         }
 
         // Process IOR
         float ior = 1.45f;
         if (material->Get(AI_MATKEY_REFRACTI, ior) == AI_SUCCESS) {
+            std::cout << "Found IOR via AI_MATKEY_REFRACTI" << std::endl;
             newMaterial->ior = ior;
         }
 
@@ -211,34 +229,60 @@ private:
         };
 
         std::vector<TextureMapping> textureMappings = {
+            // Base Color / Albedo
             {aiTextureType_BASE_COLOR, "baseColor", true,
              Material::TextureMap::ColorSpace::sRGB,
              Material::TextureMap::Interpolation::Linear,
              Material::TextureMap::Extension::Repeat,
              Material::TextureMap::AlphaMode::Straight,
              Material::TextureMap::Projection::Flat},
-
+            
+            // Handle both GLTF and traditional normal maps
+            {aiTextureType_NORMALS, "normal", false,
+             Material::TextureMap::ColorSpace::Linear,
+             Material::TextureMap::Interpolation::Linear,
+             Material::TextureMap::Extension::Repeat,
+             Material::TextureMap::AlphaMode::Straight,
+             Material::TextureMap::Projection::Flat},
+            
             {aiTextureType_NORMAL_CAMERA, "normal", false,
              Material::TextureMap::ColorSpace::Linear,
              Material::TextureMap::Interpolation::Linear,
              Material::TextureMap::Extension::Repeat,
              Material::TextureMap::AlphaMode::Straight,
              Material::TextureMap::Projection::Flat},
-
-            {aiTextureType_METALNESS, "metallic", false,
-             Material::TextureMap::ColorSpace::Linear,
-             Material::TextureMap::Interpolation::Linear,
-             Material::TextureMap::Extension::Repeat,
-             Material::TextureMap::AlphaMode::Straight,
-             Material::TextureMap::Projection::Flat},
-
+            
+            // Metallic maps (handle both GLTF and traditional)
+            // {aiTextureType_METALNESS, "metallic", false,
+            //  Material::TextureMap::ColorSpace::Linear,
+            //  Material::TextureMap::Interpolation::Linear,
+            //  Material::TextureMap::Extension::Repeat,
+            //  Material::TextureMap::AlphaMode::Straight,
+            //  Material::TextureMap::Projection::Flat},
+            
+            // Roughness maps (handle both GLTF and traditional)
             {aiTextureType_DIFFUSE_ROUGHNESS, "roughness", false,
              Material::TextureMap::ColorSpace::Linear,
              Material::TextureMap::Interpolation::Linear,
              Material::TextureMap::Extension::Repeat,
              Material::TextureMap::AlphaMode::Straight,
-             Material::TextureMap::Projection::Flat}
-             // Add other texture types as needed
+             Material::TextureMap::Projection::Flat},
+            
+            // Emission maps
+            {aiTextureType_EMISSIVE, "emission", true,
+             Material::TextureMap::ColorSpace::sRGB,
+             Material::TextureMap::Interpolation::Linear,
+             Material::TextureMap::Extension::Repeat,
+             Material::TextureMap::AlphaMode::Straight,
+             Material::TextureMap::Projection::Flat},
+            
+            // Ambient Occlusion
+            {aiTextureType_AMBIENT_OCCLUSION, "occlusion", false,
+             Material::TextureMap::ColorSpace::Linear,
+             Material::TextureMap::Interpolation::Linear,
+             Material::TextureMap::Extension::Repeat,
+             Material::TextureMap::AlphaMode::Straight,
+             Material::TextureMap::Projection::Flat},
         };
 
         // Process textures
@@ -316,7 +360,10 @@ private:
         std::cout << "IOR: " << newMaterial->ior << std::endl;
         std::cout << "Alpha: " << newMaterial->alpha << std::endl;
 
-        std::cout << "\nLoaded textures:" << std::endl;
+        if (!newMaterial->textureMaps.empty()) {
+            std::cout << "\nLoaded textures:" << std::endl;
+		}
+
         for (const auto& [type, texMap] : newMaterial->textureMaps) {
             std::cout << "\nTexture type: " << type << std::endl;
             std::cout << "Texture ID: " << texMap.textureId << std::endl;
@@ -350,6 +397,8 @@ private:
     }
 
     std::shared_ptr<Mesh> processMesh(aiMesh* mesh, const aiScene* scene) {
+        std::cout << "\n --- Calling processMesh --- \n";
+
         auto newMesh = std::make_shared<Mesh>(false);
 
         // Check if the scene has animations
@@ -573,7 +622,7 @@ public:
         }
 
         auto rootNode = std::make_shared<Node>();
-        rootNode->name = "GLB_Root";
+        rootNode->name = "GLB_Root: " + std::string(scene->mRootNode->mName.C_Str());
         processNode(scene->mRootNode, scene, rootNode);
         rootNode->updateWorldTransform();
         return rootNode;
